@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/antongulenko/RTP/MediaServerProxy"
+	"github.com/antongulenko/RTP/PacketStats"
 	"github.com/antongulenko/RTP/RtpClient"
 	"log"
 	"net"
@@ -11,11 +12,14 @@ import (
 	"strconv"
 )
 
+var statistics []*stats.Stats
+
 const (
-	rtp_ip     = "127.0.0.1"
-	rtp_port   = 9000
-	proxy_port = 9500
-	rtsp_url   = "rtsp://127.0.1.1:8554/Sample.264"
+	print_stats = true
+	rtp_ip      = "127.0.0.1"
+	rtp_port    = 9000
+	proxy_port  = 9500
+	rtsp_url    = "rtsp://127.0.1.1:8554/Sample.264"
 )
 
 func checkerr(err error) {
@@ -53,14 +57,22 @@ func doRunClient(dataPort int, stopConditions []<-chan interface{}) {
 	client, err := rtpClient.NewRtpClient(rtp_ip, rtp_port)
 	checkerr(err)
 
-	go client.ReceiveStats.LoopPrintStats(1, 3, "RTP data")
 	err = client.Request(rtsp_url, dataPort)
 	checkerr(err)
+
+	statistics = append(statistics, client.ReceiveStats)
+	statistics = append(statistics, client.MissedStats)
+	statistics = append(statistics, client.CtrlStats)
+	statistics = append(statistics, client.RtpSession.DroppedDataPackets)
+	statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
+	if print_stats {
+		go stats.LoopPrintStats(1, 3, statistics)
+	}
 
 	log.Println("Press Ctrl-C to interrupt")
 	stopConditions = append(stopConditions,
 		externalInterrupt(),
-		client.SubprocessDied)
+		client.SubprocessDied())
 	choice := waitForAny(stopConditions)
 
 	log.Println("Stopping because of", choice)
@@ -90,10 +102,12 @@ func closeProxy(proxy *proxy.UdpProxy, port int) {
 func runClientWithProxies() {
 	proxy1 := makeProxy(proxy_port, rtp_port)
 	proxy2 := makeProxy(proxy_port+1, rtp_port+1)
+	statistics = append(statistics, proxy1.Stats)
+	statistics = append(statistics, proxy2.Stats)
 
 	doRunClient(proxy_port, []<-chan interface{}{
-		proxy1.ProxyClosed,
-		proxy2.ProxyClosed,
+		proxy1.ProxyClosed(),
+		proxy2.ProxyClosed(),
 	})
 
 	closeProxy(proxy1, rtp_port)

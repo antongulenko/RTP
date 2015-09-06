@@ -9,22 +9,27 @@ import (
 	"sync"
 )
 
+const (
+	rtpDataBuffer = 128
+	rtpCtrlBuffer = 5
+)
+
 type RtpClient struct {
 	listenPort int
 	wg         sync.WaitGroup
 	rtspProc   *os.Process
 
-	session  *rtp.Session
-	ctrlChan rtp.CtrlEventChan
-	dataChan rtp.DataReceiveChan
-
-	ReceiveStats *stats.Stats
-	sequence     uint16
-	missed       uint
+	RtpSession *rtp.Session
+	ctrlChan   rtp.CtrlEventChan
+	dataChan   rtp.DataReceiveChan
 
 	requestOnce    sync.Once
-	SubprocessDied <-chan interface{}
 	subprocessDied chan interface{}
+
+	SequenceNumber uint16
+	ReceiveStats   *stats.Stats
+	CtrlStats      *stats.Stats
+	MissedStats    *stats.Stats
 }
 
 func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
@@ -45,13 +50,14 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 
 	client := &RtpClient{
 		listenPort:     listenPort,
-		ReceiveStats:   stats.NewStats(),
-		session:        session,
-		ctrlChan:       session.CreateCtrlEventChan(),
-		dataChan:       session.CreateDataReceiveChan(),
+		ReceiveStats:   stats.NewStats("RTP received"),
+		MissedStats:    stats.NewStats("RTP missed"),
+		CtrlStats:      stats.NewStats("RTCP events"),
+		RtpSession:     session,
+		ctrlChan:       session.CreateCtrlEventChan(rtpCtrlBuffer),
+		dataChan:       session.CreateDataReceiveChan(rtpDataBuffer),
 		subprocessDied: make(chan interface{}, 1),
 	}
-	client.SubprocessDied = client.subprocessDied
 
 	client.wg.Add(1)
 	go client.handleCtrlEvents()
@@ -59,6 +65,10 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 	go client.handleDataPackets()
 
 	return client, nil
+}
+
+func (client *RtpClient) SubprocessDied() <-chan interface{} {
+	return client.subprocessDied
 }
 
 func (client *RtpClient) Request(rtspUrl string, proxyPort int) (err error) {
@@ -77,8 +87,10 @@ func (client *RtpClient) Request(rtspUrl string, proxyPort int) (err error) {
 }
 
 func (client *RtpClient) Stop() {
+	client.ReceiveStats.Stop()
+	client.MissedStats.Stop()
 	client.stopRTSP()
-	client.session.CloseSession()
+	client.RtpSession.CloseSession()
 	close(client.dataChan)
 	close(client.ctrlChan)
 	client.wg.Wait()

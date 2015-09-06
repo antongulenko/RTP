@@ -1,14 +1,16 @@
 package proxy
 
 import (
+	"github.com/antongulenko/RTP/PacketStats"
 	"log"
 	"net"
 	"sync"
 )
 
 const (
-	proto    = "udp"
-	buf_size = 4096
+	proto       = "udp"
+	buf_size    = 4096
+	buf_packets = 128
 )
 
 type UdpProxy struct {
@@ -17,11 +19,12 @@ type UdpProxy struct {
 	targetConn  *net.UDPConn
 	targetAddr  *net.UDPAddr
 	closeOnce   sync.Once
-	Err         error
-	Closed      bool
-	ListenPort  int
-	ProxyClosed <-chan interface{}
 	proxyClosed chan interface{}
+	packets     chan []byte
+
+	Closed bool
+	Err    error
+	Stats  *stats.Stats
 }
 
 func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
@@ -46,14 +49,14 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 		return nil, err
 	}
 
-	closedChan := make(chan interface{}, 1)
 	return &UdpProxy{
 		listenConn:  listenConn,
 		listenAddr:  listenUDP,
 		targetConn:  targetConn,
 		targetAddr:  targetUDP,
-		proxyClosed: closedChan,
-		ProxyClosed: closedChan,
+		packets:     make(chan []byte, buf_packets),
+		proxyClosed: make(chan interface{}, 1),
+		Stats:       stats.NewStats("UDP Proxy " + listenAddr),
 	}, nil
 }
 
@@ -64,7 +67,12 @@ func (proxy *UdpProxy) doclose(err error) {
 		proxy.Err = err
 		proxy.Closed = true
 		proxy.proxyClosed <- nil
+		proxy.Stats.Stop()
 	})
+}
+
+func (proxy *UdpProxy) ProxyClosed() <-chan interface{} {
+	return proxy.proxyClosed
 }
 
 func (proxy *UdpProxy) Close() {
@@ -72,6 +80,7 @@ func (proxy *UdpProxy) Close() {
 }
 
 func (proxy *UdpProxy) readPackets() {
+	defer close(proxy.packets)
 	for {
 		buf := make([]byte, buf_size)
 		nbytes, _ /*sourceAddr*/, err := proxy.listenConn.ReadFrom(buf)
@@ -79,17 +88,26 @@ func (proxy *UdpProxy) readPackets() {
 			proxy.doclose(err)
 			return
 		}
-		go func() {
-			_ /*sentbytes*/, err := proxy.targetConn.Write(buf[:nbytes])
-			if err != nil {
-				proxy.doclose(err)
-				return
-			}
-		}()
+		if proxy.Closed {
+			return
+		}
+		proxy.packets <- buf[:nbytes]
+	}
+}
+
+func (proxy *UdpProxy) forwardPackets() {
+	for bytes := range proxy.packets {
+		sentbytes, err := proxy.targetConn.Write(bytes)
+		if err != nil {
+			proxy.doclose(err)
+			return
+		}
+		proxy.Stats.AddNow(uint(sentbytes))
 	}
 }
 
 func (proxy *UdpProxy) Start() {
 	log.Printf("UDP proxy started from %v to %v\n", proxy.listenAddr, proxy.targetAddr)
 	go proxy.readPackets()
+	go proxy.forwardPackets()
 }
