@@ -3,11 +3,11 @@ package stats
 import (
 	"container/list"
 	"fmt"
+	"sync"
 	"time"
 )
 
 var (
-	DefaultSecondsPeriod     = 3
 	IncomingPacketChanBuffer = 50
 )
 
@@ -19,23 +19,35 @@ type packet struct {
 type Stats struct {
 	packets         *list.List
 	incomingPackets chan packet
+	runningAverage  bool
+	startOnce       sync.Once
 	totalPackets    uint
 	totalBytes      uint
+	startTimestamp  time.Time
 	name            string
 }
 
 func NewStats(name string) *Stats {
 	stats := &Stats{
-		name:            name,
-		packets:         list.New(),
-		incomingPackets: make(chan packet, IncomingPacketChanBuffer),
+		name:           name,
+		packets:        list.New(),
+		startTimestamp: time.Now(),
 	}
-	go stats.addPackets()
 	return stats
 }
 
+func (stats *Stats) Start() {
+	stats.startOnce.Do(func() {
+		stats.runningAverage = true
+		stats.incomingPackets = make(chan packet, IncomingPacketChanBuffer)
+		go stats.addPackets()
+	})
+}
+
 func (stats *Stats) Stop() {
-	close(stats.incomingPackets)
+	if stats.runningAverage {
+		close(stats.incomingPackets)
+	}
 }
 
 func (stats *Stats) Packets() uint {
@@ -55,20 +67,34 @@ func (stats *Stats) perSecond(value uint) float32 {
 }
 
 func (stats *Stats) PacketsPerSecond() float32 {
-	return stats.perSecond(uint(stats.packets.Len()))
+	var packets uint
+	if stats.runningAverage {
+		packets = uint(stats.packets.Len())
+	} else {
+		packets = stats.totalPackets
+	}
+	return stats.perSecond(packets)
 }
 
 func (stats *Stats) BytesPerSecond() float32 {
-	var bytes uint = 0
-	for e := stats.packets.Front(); e != nil; e = e.Next() {
-		p := e.Value.(packet)
-		bytes += p.bytes
+	var bytes uint
+	if stats.runningAverage {
+		for e := stats.packets.Front(); e != nil; e = e.Next() {
+			p := e.Value.(packet)
+			bytes += p.bytes
+		}
+	} else {
+		bytes = stats.totalBytes
 	}
 	return stats.perSecond(bytes)
 }
 
 func (stats *Stats) Add(t time.Time, bytes uint) {
-	stats.incomingPackets <- packet{t, bytes}
+	stats.totalPackets++
+	stats.totalBytes += bytes
+	if stats.runningAverage {
+		stats.incomingPackets <- packet{t, bytes}
+	}
 }
 
 func (stats *Stats) AddNow(bytes uint) {
@@ -129,19 +155,22 @@ func LoopPrintStats(secondsTimeout, secondsPeriod uint, stats []*Stats) {
 }
 
 func (stats *Stats) storedSeconds() float32 {
-	now := time.Now()
-	peek := stats.packets.Front()
-	if peek == nil {
-		return 0
+	var timestamp time.Time
+	if stats.runningAverage {
+		peek := stats.packets.Front()
+		if peek == nil {
+			return 0
+		}
+		oldestPacket := peek.Value.(packet)
+		timestamp = oldestPacket.timestamp
+	} else {
+		timestamp = stats.startTimestamp
 	}
-	oldestPacket := peek.Value.(packet)
-	return float32(now.Sub(oldestPacket.timestamp)) / float32(time.Second)
+	return float32(time.Now().Sub(timestamp)) / float32(time.Second)
 }
 
 func (stats *Stats) addPackets() {
 	for p := range stats.incomingPackets {
-		stats.totalPackets++
-		stats.totalBytes += p.bytes
 		stats.packets.PushBack(p)
 	}
 }

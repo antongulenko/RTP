@@ -1,8 +1,7 @@
-package proxy
+package proxies
 
 import (
-	"github.com/antongulenko/RTP/PacketStats"
-	"log"
+	"github.com/antongulenko/RTP/stats"
 	"net"
 	"sync"
 )
@@ -107,7 +106,6 @@ func (proxy *UdpProxy) forwardPackets() {
 }
 
 func (proxy *UdpProxy) Start() {
-	log.Printf("UDP proxy started from %v to %v\n", proxy.listenAddr, proxy.targetAddr)
 	go proxy.readPackets()
 	go proxy.forwardPackets()
 }
