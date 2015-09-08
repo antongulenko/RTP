@@ -13,3 +13,8 @@ amp: noint
 	go install github.com/antongulenko/RTP/proxies/AmpProxy \
 		&& echo ./noint AmpProxy \
 		|| echo false
+
+pcp: noint
+	go install github.com/antongulenko/RTP/proxies/UdpPcp \
+		&& echo ./noint UdpPcp \
+		|| echo false

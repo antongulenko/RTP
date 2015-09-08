@@ -24,7 +24,6 @@ type AmpProxy struct {
 }
 
 type proxySession struct {
-	// TODO Observe RtspClient / report errors
 	backend   *rtpClient.RtspClient
 	port      int
 	mediaFile string

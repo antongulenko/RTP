@@ -21,12 +21,12 @@ const (
 )
 
 type PcpPacket struct {
-	protocols.Packet
+	*protocols.Packet
 }
 
 func NewPacket(code uint, val interface{}) *PcpPacket {
 	return &PcpPacket{
-		protocols.Packet{
+		&protocols.Packet{
 			Code: code,
 			Val:  val,
 		},
@@ -34,8 +34,8 @@ func NewPacket(code uint, val interface{}) *PcpPacket {
 }
 
 type StartProxySession struct {
-	port     uint
-	clientIP string
+	ListenAddr string
+	TargetAddr string
 }
 
 type StopProxySession StartProxySession
@@ -59,7 +59,7 @@ func ReadPacket(reader io.Reader) (*PcpPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &PcpPacket{*packet}, nil
+	return &PcpPacket{packet}, nil
 }
 
 func ReceivePacket(conn *net.UDPConn) (*PcpPacket, error) {
@@ -67,13 +67,13 @@ func ReceivePacket(conn *net.UDPConn) (*PcpPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &PcpPacket{*packet}, nil
+	return &PcpPacket{packet}, nil
 }
 
 func (packet *PcpPacket) SendPcpRequest(conn *net.UDPConn, addr *net.UDPAddr) (pcpReply *PcpPacket, err error) {
 	var reply *protocols.Packet
-	if reply, err := packet.SendReqest(conn, addr, ReceiveBuffer, pcpProtocolReader); err == nil {
-		pcpReply = &PcpPacket{*reply}
+	if reply, err = packet.SendRequest(conn, addr, ReceiveBuffer, pcpProtocolReader); err == nil {
+		pcpReply = &PcpPacket{reply}
 	}
 	return
 }
