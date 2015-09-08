@@ -83,6 +83,7 @@ func (proxy *PcpProxy) startSession(desc *pcp.StartProxySession) error {
 		return fmt.Errorf("UDP proxy already running for port %v", port)
 	}
 
+	fmt.Println("Starting proxy on " + strconv.Itoa(port))
 	udp, err := NewUdpProxy(desc.ListenAddr, desc.TargetAddr)
 	if err != nil {
 		return err
@@ -106,6 +107,7 @@ func (proxy *PcpProxy) stopSession(desc *pcp.StopProxySession) error {
 
 func (proxy *PcpProxy) cleanupSession(port int) {
 	if udp, ok := proxy.sessions[port]; ok {
+		fmt.Println("Closing proxy on " + strconv.Itoa(port))
 		udp.Close()
 		if udp.UdpProxy.Err != nil {
 			proxy.LogError(udp.UdpProxy.Err)

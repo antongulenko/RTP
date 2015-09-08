@@ -71,10 +71,14 @@ func ReceivePacket(conn *net.UDPConn) (*AmpPacket, error) {
 	return &AmpPacket{packet}, nil
 }
 
-func (packet *AmpPacket) SendAmpRequest(conn *net.UDPConn, addr *net.UDPAddr) (pcpReply *AmpPacket, err error) {
-	var reply *protocols.Packet
-	if reply, err = packet.SendRequest(conn, addr, ReceiveBuffer, ampProtocolReader); err == nil {
-		pcpReply = &AmpPacket{reply}
+func (packet *AmpPacket) SendRequest(conn *net.UDPConn, addr *net.UDPAddr) (*protocols.Packet, error) {
+	return packet.SendRawRequest(conn, addr, ReceiveBuffer, ampProtocolReader)
+}
+
+func (packet *AmpPacket) SendAmpRequest(conn *net.UDPConn, addr *net.UDPAddr) (reply *AmpPacket, err error) {
+	var rawReply *protocols.Packet
+	if rawReply, err = packet.SendRequest(conn, addr); err != nil {
+		reply = &AmpPacket{rawReply}
 	}
 	return
 }

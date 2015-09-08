@@ -39,6 +39,10 @@ func (packet *Packet) Error() (res string) {
 	return
 }
 
+type IPacket interface {
+	SendRequest(conn *net.UDPConn, addr *net.UDPAddr) (reply *Packet, err error)
+}
+
 type ProtocolReader func(code uint, decoder *gob.Decoder) (interface{}, error)
 
 func ReadPacket(reader io.Reader, protocol ProtocolReader) (*Packet, error) {
@@ -130,7 +134,7 @@ func (packet *Packet) SendPacketTo(conn *net.UDPConn, addr *net.UDPAddr) error {
 	return err
 }
 
-func (packet *Packet) SendRequest(conn *net.UDPConn, addr *net.UDPAddr, replyBufferSize uint, protocol ProtocolReader) (reply *Packet, err error) {
+func (packet *Packet) SendRawRequest(conn *net.UDPConn, addr *net.UDPAddr, replyBufferSize uint, protocol ProtocolReader) (reply *Packet, err error) {
 	if err = packet.SendPacketTo(conn, addr); err == nil {
 		reply, err = ReceivePacket(conn, replyBufferSize, protocol)
 	}
