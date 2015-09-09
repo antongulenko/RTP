@@ -1,10 +1,11 @@
 package rtpClient
 
 import (
-	"github.com/antongulenko/RTP/stats"
-	"github.com/antongulenko/gortp"
 	"net"
 	"sync"
+
+	"github.com/antongulenko/RTP/stats"
+	"github.com/antongulenko/gortp"
 )
 
 const (

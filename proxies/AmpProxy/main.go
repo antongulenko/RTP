@@ -1,17 +1,17 @@
 package main
 
 import (
+	"log"
+
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/proxies"
 	"github.com/antongulenko/RTP/rtpClient"
 )
-import (
-	"log"
-)
 
 const (
-	rtsp_url   = "rtsp://127.0.1.1:8554"
-	local_addr = "127.0.0.1:7777"
+	rtsp_url = "rtsp://127.0.1.1:8554"
+	amp_addr = "127.0.0.1:7777"
+	local_ip = "127.0.0.1"
 )
 
 func printAmpErrors(proxy *proxies.AmpProxy) {
@@ -20,21 +20,27 @@ func printAmpErrors(proxy *proxies.AmpProxy) {
 	}
 }
 
-func printRtspErrors(rtsp *rtpClient.RtspClient) {
-	log.Printf("RTSP subprocess: %s. Logfile: %v\n", rtsp.StateString, rtsp.Logfile)
+func printRtspStart(rtsp *rtpClient.RtspClient) {
+	log.Printf("RTSP subprocess started (%v). Logfile: %v\n", rtsp.Proc.Pid, rtsp.Logfile)
+}
+
+func printRtspStop(rtsp *rtpClient.RtspClient) {
+	log.Printf("RTSP subprocess: %v. Logfile: %v\n", rtsp.StateString, rtsp.Logfile)
 }
 
 func main() {
-	proxy, err := proxies.NewAmpProxy(local_addr, rtsp_url)
+	proxy, err := proxies.NewAmpProxy(amp_addr, rtsp_url, local_ip)
 	Checkerr(err)
 
 	// Set up error reporting
 	go printAmpErrors(proxy)
-	proxy.ProcessDiedCallback = printRtspErrors
+	proxy.RtspStartedCallback = printRtspStart
+	proxy.RtspEndedCallback = printRtspStop
 
 	proxy.Start()
 
-	log.Println("Press Ctrl+D to close")
+	log.Println("Listening to AMP on " + amp_addr + ", backend URL: " + rtsp_url)
+	log.Println("Press Ctrl-D to close")
 	<-StdinClosed()
 
 	proxy.Stop()

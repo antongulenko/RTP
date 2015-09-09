@@ -1,28 +1,30 @@
 package proxies
 
 import (
-	"github.com/antongulenko/RTP/protocols"
-	"github.com/antongulenko/RTP/protocols/pcp"
-)
-import (
 	"fmt"
 	"net"
 	"strconv"
+
+	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/pcp"
 )
 
 type PcpProxy struct {
 	*protocols.Server
-	sessions map[int]*session
+	sessions map[int]*udpSession
+
+	ProxyStartedCallback func(proxy *UdpProxy)
+	ProxyStoppedCallback func(proxy *UdpProxy)
 }
 
-type session struct {
+type udpSession struct {
 	*UdpProxy
 	port int
 }
 
 func NewPcpProxy(pcpAddr string) (*PcpProxy, error) {
 	proxy := &PcpProxy{
-		sessions: make(map[int]*session),
+		sessions: make(map[int]*udpSession),
 	}
 	var err error
 	proxy.Server, err = protocols.NewServer(pcpAddr, proxy)
@@ -33,8 +35,8 @@ func NewPcpProxy(pcpAddr string) (*PcpProxy, error) {
 }
 
 func (proxy *PcpProxy) StopServer() {
-	for port, _ := range proxy.sessions {
-		proxy.cleanupSession(port)
+	for _, session := range proxy.sessions {
+		proxy.cleanupSession(session)
 	}
 }
 
@@ -83,13 +85,15 @@ func (proxy *PcpProxy) startSession(desc *pcp.StartProxySession) error {
 		return fmt.Errorf("UDP proxy already running for port %v", port)
 	}
 
-	fmt.Println("Starting proxy on " + strconv.Itoa(port))
 	udp, err := NewUdpProxy(desc.ListenAddr, desc.TargetAddr)
 	if err != nil {
 		return err
 	}
 	udp.Start()
-	proxy.sessions[port] = &session{udp, port}
+	proxy.sessions[port] = &udpSession{udp, port}
+	if proxy.ProxyStartedCallback != nil {
+		proxy.ProxyStartedCallback(udp)
+	}
 	return nil
 }
 
@@ -98,20 +102,21 @@ func (proxy *PcpProxy) stopSession(desc *pcp.StopProxySession) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := proxy.sessions[port]; !ok {
+	if session, ok := proxy.sessions[port]; !ok {
 		return fmt.Errorf("No UDP proxy running for port %v", port)
+	} else {
+		proxy.cleanupSession(session)
 	}
-	proxy.cleanupSession(port)
 	return nil
 }
 
-func (proxy *PcpProxy) cleanupSession(port int) {
-	if udp, ok := proxy.sessions[port]; ok {
-		fmt.Println("Closing proxy on " + strconv.Itoa(port))
-		udp.Close()
-		if udp.UdpProxy.Err != nil {
-			proxy.LogError(udp.UdpProxy.Err)
-		}
-		delete(proxy.sessions, port)
+func (proxy *PcpProxy) cleanupSession(session *udpSession) {
+	session.Close()
+	if session.UdpProxy.Err != nil {
+		proxy.LogError(fmt.Errorf("UDP proxy error: %v", session.UdpProxy.Err))
 	}
+	if proxy.ProxyStoppedCallback != nil {
+		proxy.ProxyStoppedCallback(session.UdpProxy)
+	}
+	delete(proxy.sessions, session.port)
 }

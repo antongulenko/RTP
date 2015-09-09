@@ -1,9 +1,12 @@
 package proxies
 
 import (
-	"github.com/antongulenko/RTP/stats"
+	"fmt"
 	"net"
+	"strconv"
 	"sync"
+
+	"github.com/antongulenko/RTP/stats"
 )
 
 const (
@@ -59,6 +62,28 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 	}, nil
 }
 
+func NewUdpProxyPair(listenHost, target1, target2 string, startPort, maxPort int) (proxy1 *UdpProxy, proxy2 *UdpProxy, err error) {
+	for {
+		addr1 := net.JoinHostPort(listenHost, strconv.Itoa(startPort))
+		proxy1, err = NewUdpProxy(addr1, target1)
+		if err == nil {
+			addr2 := net.JoinHostPort(listenHost, strconv.Itoa(startPort+1))
+			proxy2, err = NewUdpProxy(addr2, target2)
+			if err == nil {
+				break
+			} else {
+				proxy1.Close()
+			}
+		}
+		startPort += 2
+		if startPort > maxPort {
+			err = fmt.Errorf("Failed to allocate UDP proxy pair in port range %v-%v", startPort, maxPort)
+			break
+		}
+	}
+	return
+}
+
 func (proxy *UdpProxy) doclose(err error) {
 	proxy.closeOnce.Do(func() {
 		proxy.listenConn.Close()
@@ -108,4 +133,8 @@ func (proxy *UdpProxy) forwardPackets() {
 func (proxy *UdpProxy) Start() {
 	go proxy.readPackets()
 	go proxy.forwardPackets()
+}
+
+func (proxy *UdpProxy) String() string {
+	return fmt.Sprintf("%v -> %v", proxy.listenAddr, proxy.targetAddr)
 }

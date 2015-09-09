@@ -6,9 +6,10 @@ package pcp
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/antongulenko/RTP/protocols"
 	"io"
 	"net"
+
+	"github.com/antongulenko/RTP/protocols"
 )
 
 const (

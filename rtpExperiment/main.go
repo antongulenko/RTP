@@ -1,6 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"log"
+	"net"
+	"strconv"
+	"time"
+
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
@@ -10,15 +16,11 @@ import (
 	"github.com/antongulenko/RTP/stats"
 	"github.com/antongulenko/gortp"
 )
-import (
-	"fmt"
-	"log"
-	"net"
-	"strconv"
-	"time"
-)
 
-var statistics []*stats.Stats
+var (
+	statistics     []*stats.Stats
+	stopConditions []<-chan interface{}
+)
 
 const (
 	print_stats       = true
@@ -34,10 +36,12 @@ const (
 	amp_server     = "127.0.0.1:7777"
 	amp_media_file = "Sample.264"
 
-	rtp_ip     = "127.0.0.1"
-	rtp_port   = 9000
-	proxy_port = 9500
-	rtsp_url   = "rtsp://127.0.1.1:8554/Sample.264"
+	use_proxy = false
+
+	rtp_ip         = "127.0.0.1"
+	start_rtp_port = 9000
+	proxy_port     = 9500
+	rtsp_url       = "rtsp://127.0.1.1:8554/Sample.264"
 )
 
 func open(local string, server string) (conn *net.UDPConn, serverAddr *net.UDPAddr) {
@@ -61,45 +65,31 @@ func send(conn *net.UDPConn, addr *net.UDPAddr, packet protocols.IPacket) {
 	}
 }
 
-func doRunClient(dataPort int, stopConditions []<-chan interface{}) {
-	log.Printf("Listening on %v UDP ports %v and %v for rtp/rtcp\n", rtp_ip, rtp_port, rtp_port+1)
-	client, err := rtpClient.NewRtpClient(rtp_ip, rtp_port)
-	Checkerr(err)
-
-	if print_ctrl_events {
-		client.CtrlHandler = func(evt *rtp.CtrlEvent) {
-			fmt.Println(rtpClient.CtrlEventString(evt))
-		}
-	}
-
+func startStream(client *rtpClient.RtpClient, rtp_port int, stopConditions []<-chan interface{}) {
 	if use_amp {
 		conn, addr := open(amp_local, amp_server)
 		packet := amp.NewPacket(amp.CodeStartSession, amp.StartSessionValue{
-			MediaFile: amp_media_file,
-			Port:      dataPort,
+			MediaFile:    amp_media_file,
+			ReceiverHost: rtp_ip,
+			Port:         rtp_port,
 		})
 		send(conn, addr, packet)
 
 		defer func() {
 			packet := amp.NewPacket(amp.CodeStopSession, amp.StopSessionValue{
-				MediaFile: amp_media_file,
-				Port:      dataPort,
+				ReceiverHost: rtp_ip,
+				Port:         rtp_port,
 			})
 			send(conn, addr, packet)
 			conn.Close()
 		}()
 	} else {
-		rtsp, err := client.RequestRtsp(rtsp_url, dataPort, "main.log")
+		rtsp, err := client.RequestRtsp(rtsp_url, rtp_port, "main.log")
 		Checkerr(err)
 		defer rtsp.Stop()
 		stopConditions = append(stopConditions, client.ObserveRtsp(rtsp))
 	}
 
-	statistics = append(statistics, client.ReceiveStats)
-	statistics = append(statistics, client.MissedStats)
-	statistics = append(statistics, client.CtrlStats)
-	statistics = append(statistics, client.RtpSession.DroppedDataPackets)
-	statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
 	if print_stats {
 		if running_average {
 			for _, s := range statistics {
@@ -128,7 +118,7 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	p, err := proxies.NewUdpProxy(listen, target)
 	Checkerr(err)
 	p.Start()
-	log.Printf("UDP proxy started from %v to %v\n", listen, target)
+	log.Printf("UDP proxy started: %s\n", p)
 	return p
 }
 
@@ -157,13 +147,36 @@ func closeProxyPCP(listenPort, targetPort int, conn *net.UDPConn, addr *net.UDPA
 	send(conn, addr, packet)
 }
 
-func runClient() {
-	doRunClient(rtp_port, nil)
+func startClient() (client *rtpClient.RtpClient, rtp_port int) {
+	rtp_port = start_rtp_port
+	for {
+		var err error
+		client, err = rtpClient.NewRtpClient(rtp_ip, rtp_port)
+		if err != nil {
+			log.Printf("Failed to start RTP client on port %v: %v", rtp_port, err)
+			rtp_port += 2
+		} else {
+			break
+		}
+	}
+	log.Printf("Listening on %v UDP ports %v and %v for rtp/rtcp\n", rtp_ip, rtp_port, rtp_port+1)
+
+	if print_ctrl_events {
+		client.CtrlHandler = func(evt *rtp.CtrlEvent) {
+			fmt.Println(rtpClient.CtrlEventString(evt))
+		}
+	}
+
+	statistics = append(statistics, client.ReceiveStats)
+	statistics = append(statistics, client.MissedStats)
+	statistics = append(statistics, client.CtrlStats)
+	statistics = append(statistics, client.RtpSession.DroppedDataPackets)
+	statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
+
+	return
 }
 
-func runClientWithProxies() {
-	var stopConditions []<-chan interface{}
-
+func startProxies(rtp_port int) {
 	if use_pcp {
 		conn, server := open(pcp_local, pcp_server)
 		makeProxyPCP(proxy_port, rtp_port, conn, server)
@@ -184,15 +197,12 @@ func runClientWithProxies() {
 			closeProxy(proxy2, rtp_port+1)
 		}()
 	}
-
-	doRunClient(proxy_port, stopConditions)
 }
 
 func main() {
-	use_proxy := true
+	client, rtp_port := startClient()
 	if use_proxy {
-		runClientWithProxies()
-	} else {
-		runClient()
+		startProxies(rtp_port)
 	}
+	startStream(client, rtp_port, stopConditions)
 }

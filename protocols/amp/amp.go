@@ -7,9 +7,10 @@ package amp
 import (
 	"encoding/gob"
 	"fmt"
-	"github.com/antongulenko/RTP/protocols"
 	"io"
 	"net"
+
+	"github.com/antongulenko/RTP/protocols"
 )
 
 const (
@@ -35,11 +36,15 @@ func NewPacket(code uint, val interface{}) *AmpPacket {
 }
 
 type StartSessionValue struct {
-	MediaFile string
-	Port      int
+	MediaFile    string
+	ReceiverHost string
+	Port         int
 }
 
-type StopSessionValue StartSessionValue
+type StopSessionValue struct {
+	ReceiverHost string
+	Port         int
+}
 
 func (packet *AmpPacket) StartSession() (res *StartSessionValue) {
 	if packet.Code == CodeStartSession {
