@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bufio"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -38,8 +39,27 @@ func ExternalInterrupt() <-chan interface{} {
 	return stop
 }
 
-func WaitForUserInput() {
-	reader := bufio.NewReader(os.Stdin)
-	_, err := reader.ReadString('\n')
-	Checkerr(err)
+func UserInput() <-chan interface{} {
+	userinput := make(chan interface{}, 1)
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		_, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("Error reading user input:", err)
+		}
+		userinput <- nil
+	}()
+	return userinput
+}
+
+func StdinClosed() <-chan interface{} {
+	closed := make(chan interface{}, 1)
+	go func() {
+		_, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			log.Println("Error reading stdin:", err)
+		}
+		closed <- nil
+	}()
+	return closed
 }

@@ -34,8 +34,8 @@ func main() {
 
 	proxy.Start()
 
-	log.Println("Press Enter to close")
-	WaitForUserInput()
+	log.Println("Press Ctrl+D to close")
+	<-StdinClosed()
 
 	proxy.Stop()
 }

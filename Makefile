@@ -16,5 +16,5 @@ amp: noint
 
 pcp: noint
 	go install github.com/antongulenko/RTP/proxies/UdpPcp \
-		&& echo ./noint UdpPcp \
+		&& echo UdpPcp \
 		|| echo false
