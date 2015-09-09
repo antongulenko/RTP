@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/rtpClient"
 )
@@ -20,7 +19,7 @@ const (
 )
 
 type AmpProxy struct {
-	*protocols.Server
+	*amp.AmpServer
 
 	rtspURL   *url.URL
 	proxyHost string
@@ -42,7 +41,7 @@ type proxySession struct {
 // ampAddr: address to listen on for AMP requests
 // rtspURL: base URL used when sending RTSP requests to the backend media server
 // localProxyIP: address to receive RTP/RTCP packets from the media server
-func NewAmpProxy(ampAddr, rtspURL, localProxyIP string) (*AmpProxy, error) {
+func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (*AmpProxy, error) {
 	u, err := url.Parse(rtspURL)
 	if err != nil {
 		return nil, err
@@ -61,7 +60,7 @@ func NewAmpProxy(ampAddr, rtspURL, localProxyIP string) (*AmpProxy, error) {
 		proxyHost: ip.String(),
 		sessions:  make(map[string]*proxySession),
 	}
-	proxy.Server, err = protocols.NewServer(ampAddr, proxy)
+	proxy.AmpServer, err = amp.NewAmpServer(local_addr, proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -74,35 +73,7 @@ func (proxy *AmpProxy) StopServer() {
 	}
 }
 
-func (proxy *AmpProxy) ReceivePacket(conn *net.UDPConn) (*protocols.Packet, error) {
-	packet, err := amp.ReceivePacket(conn)
-	if err != nil {
-		return nil, err
-	}
-	return packet.Packet, err
-}
-
-func (proxy *AmpProxy) HandleRequest(request *protocols.Packet) {
-	packet := &amp.AmpPacket{request}
-	switch packet.Code {
-	case amp.CodeStartSession:
-		if desc := packet.StartSession(); desc == nil {
-			proxy.ReplyError(packet.Packet, fmt.Errorf("Illegal value for AMP CodeStartSession: %v", packet.Val))
-		} else {
-			proxy.ReplyCheck(packet.Packet, proxy.startSession(desc))
-		}
-	case amp.CodeStopSession:
-		if desc := packet.StopSession(); desc == nil {
-			proxy.ReplyError(packet.Packet, fmt.Errorf("Illegal value for AMP CodeStopSession: %v", packet.Val))
-		} else {
-			proxy.ReplyCheck(packet.Packet, proxy.stopSession(desc))
-		}
-	default:
-		proxy.LogError(fmt.Errorf("Received unexpected AMP code: %v", packet.Code))
-	}
-}
-
-func (proxy *AmpProxy) startSession(desc *amp.StartSessionValue) error {
+func (proxy *AmpProxy) StartSession(desc *amp.StartSessionValue) error {
 	client := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port))
 	_, ok := proxy.sessions[client]
 	if ok {
@@ -137,7 +108,7 @@ func (proxy *AmpProxy) startSession(desc *amp.StartSessionValue) error {
 	return nil
 }
 
-func (proxy *AmpProxy) stopSession(desc *amp.StopSessionValue) error {
+func (proxy *AmpProxy) StopSession(desc *amp.StopSessionValue) error {
 	client := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port))
 	session, ok := proxy.sessions[client]
 	if !ok {
