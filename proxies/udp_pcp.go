@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols/pcp"
 )
 
@@ -17,8 +18,9 @@ type PcpProxy struct {
 }
 
 type udpSession struct {
-	*UdpProxy
-	port int
+	udp     *UdpProxy
+	port    int
+	stopped *helpers.OneshotCondition
 }
 
 func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
@@ -59,8 +61,17 @@ func (proxy *PcpProxy) StartProxy(desc *pcp.StartProxy) error {
 	if err != nil {
 		return err
 	}
+	session := &udpSession{
+		udp:     udp,
+		port:    port,
+		stopped: helpers.NewOneshotCondition(),
+	}
+	proxy.sessions[port] = session
 	udp.Start()
-	proxy.sessions[port] = &udpSession{udp, port}
+	go func() {
+		<-udp.Observe(proxy.Wg)
+		proxy.cleanupSession(session)
+	}()
 	if proxy.ProxyStartedCallback != nil {
 		proxy.ProxyStartedCallback(udp)
 	}
@@ -81,12 +92,14 @@ func (proxy *PcpProxy) StopProxy(desc *pcp.StopProxy) error {
 }
 
 func (proxy *PcpProxy) cleanupSession(session *udpSession) {
-	session.Stop()
-	if session.UdpProxy.Err != nil {
-		proxy.LogError(fmt.Errorf("UDP proxy error: %v", session.UdpProxy.Err))
-	}
-	if proxy.ProxyStoppedCallback != nil {
-		proxy.ProxyStoppedCallback(session.UdpProxy)
-	}
-	delete(proxy.sessions, session.port)
+	session.stopped.Enable(func() {
+		session.udp.Stop()
+		if session.udp.Err != nil {
+			proxy.LogError(fmt.Errorf("UDP proxy error: %v", session.udp.Err))
+		}
+		if proxy.ProxyStoppedCallback != nil {
+			proxy.ProxyStoppedCallback(session.udp)
+		}
+		delete(proxy.sessions, session.port)
+	})
 }
