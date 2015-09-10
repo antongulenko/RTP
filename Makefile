@@ -18,3 +18,8 @@ pcp: noint
 	go install github.com/antongulenko/RTP/proxies/UdpPcp \
 		&& echo UdpPcp \
 		|| echo false
+
+balancer: noint
+	go install github.com/antongulenko/RTP/proxies/AmpBalancer \
+		&& echo AmpBalancer \
+		|| echo false

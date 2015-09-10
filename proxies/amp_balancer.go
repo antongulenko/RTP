@@ -22,16 +22,16 @@ type balancerSession struct {
 	client string
 }
 
-func NewAmpBalancer(local_addr) (*AmpBalancer, error) {
-	balancer := &AmpBalancer{
+func NewAmpBalancer(local_addr string) (balancer *AmpBalancer, err error) {
+	balancer = &AmpBalancer{
 		sessions: make(map[string]*balancerSession),
-		servers:  make([]mediaServer, 10),
+		Servers:  make([]*MediaServer, 10),
 	}
-	balancer.AmpServer, err = amp.NewServer(local_addr, balancer)
+	balancer.Server, err = amp.NewServer(local_addr, balancer)
 	if err != nil {
-		return nil, err
+		balancer = nil
 	}
-	return balancer, nil
+	return
 }
 
 func (balancer *AmpBalancer) AddMediaServer(addr string) error {
@@ -39,10 +39,10 @@ func (balancer *AmpBalancer) AddMediaServer(addr string) error {
 	if err != nil {
 		return err
 	}
-	server := &MediaServer{
+	balancer.Servers = append(balancer.Servers, &MediaServer{
 		Addr: serverAddr,
-	}
-	balancer.servers = append(balancer.servers, server)
+	})
+	return nil
 }
 
 func (balancer *AmpBalancer) StopServer() {
@@ -53,7 +53,7 @@ func (balancer *AmpBalancer) StopServer() {
 	}
 }
 
-func (balancer *AmpBalancer) StartSession(desc *amp.StartStream) error {
+func (balancer *AmpBalancer) StartStream(desc *amp.StartStream) error {
 	client := desc.Client()
 	if _, ok := balancer.sessions[client]; ok {
 		return fmt.Errorf("Session already running for client %v", client)
@@ -65,7 +65,7 @@ func (balancer *AmpBalancer) StartSession(desc *amp.StartStream) error {
 	session := &balancerSession{
 		client: client,
 	}
-	err = session.startRemoteSession(desc)
+	err := session.startRemoteSession(desc)
 	if err != nil {
 		return fmt.Errorf("Error delegating request: %v", err)
 	}
@@ -75,23 +75,19 @@ func (balancer *AmpBalancer) StartSession(desc *amp.StartStream) error {
 
 func (balancer *AmpBalancer) pickServer() *MediaServer {
 	// TODO implement load balancing
-	if len(balancer.servers == 0) {
+	if len(balancer.Servers) == 0 {
 		return nil
 	}
-	return balancer.servers[0]
+	return balancer.Servers[0]
 }
 
-func (balancer *AmpBalancer) StopSession(desc *amp.StopStream) error {
+func (balancer *AmpBalancer) StopStream(desc *amp.StopStream) error {
 	client := desc.Client()
 	session, ok := balancer.sessions[client]
 	if !ok {
-		return fmt.Errorf("No session running client %v", client)
+		return fmt.Errorf("No session running for client %v", client)
 	}
-	err := balancer.cleanupSession(session)
-	if err != nil {
-		return err
-	}
-	return nil
+	return balancer.cleanupSession(session)
 }
 
 func (balancer *AmpBalancer) cleanupSession(session *balancerSession) error {
@@ -100,12 +96,13 @@ func (balancer *AmpBalancer) cleanupSession(session *balancerSession) error {
 	if err != nil {
 		return fmt.Errorf("Error stopping remote session: %v", err)
 	}
+	return nil
 }
 
 func (session *balancerSession) startRemoteSession(desc *amp.StartStream) error {
-
+	return nil
 }
 
 func (session *balancerSession) stopRemoteSession() error {
-
+	return nil
 }

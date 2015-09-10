@@ -31,6 +31,9 @@ const (
 	amp_server     = "127.0.0.1:7777"
 	amp_media_file = "Sample.264"
 
+	use_balancer = true
+	amp_balancer = "127.0.0.1:7779"
+
 	use_proxy       = true
 	pretend_proxies = false
 
@@ -72,9 +75,13 @@ func startClient() (rtp_port int) {
 
 func startStream(rtp_port int) {
 	if use_amp {
+		server := amp_server
+		if use_balancer {
+			server = amp_balancer
+		}
 		client, err := amp.NewClient(protocol_local)
 		Checkerr(err)
-		Checkerr(client.SetServer(amp_server))
+		Checkerr(client.SetServer(server))
 		Checkerr(client.StartStream(rtp_ip, rtp_port, amp_media_file))
 		observees = append(observees, CleanupObservee(func() {
 			Printerr(client.StopStream(rtp_ip, rtp_port))
@@ -87,7 +94,12 @@ func startStream(rtp_port int) {
 	}
 }
 
+func stopObservees() {
+	ReverseStopObservees(observees)
+}
+
 func main() {
+	ExitHook = stopObservees
 	rtp_port := startClient()
 	if use_proxy {
 		rtp_port = startProxies(rtp_port)
@@ -108,6 +120,7 @@ func main() {
 
 	log.Println("Press Ctrl-C to interrupt")
 	observees = append(observees, &NoopObservee{ExternalInterrupt()})
-	choice := WaitAndStopObservees(nil, observees)
+	choice := WaitForAnyObservee(nil, observees)
 	log.Println("Stopped because of", choice)
+	stopObservees()
 }

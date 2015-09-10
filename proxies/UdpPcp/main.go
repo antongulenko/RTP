@@ -37,7 +37,7 @@ func main() {
 	proxy.Start()
 
 	log.Println("Listening to PCP on " + local_addr)
-	log.Println("Press Ctrl-C to interrupt")
+	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
 		proxy,
 		&NoopObservee{ExternalInterrupt()},

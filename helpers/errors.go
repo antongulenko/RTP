@@ -1,10 +1,21 @@
 package helpers
 
-import "log"
+import (
+	"log"
+	"os"
+)
+
+var (
+	ExitHook func()
+)
 
 func Checkerr(err error) {
 	if err != nil {
-		log.Fatalln("Error:", err)
+		log.Println("Error:", err)
+		if ExitHook != nil {
+			ExitHook()
+		}
+		os.Exit(1)
 	}
 }
 

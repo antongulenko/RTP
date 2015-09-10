@@ -105,12 +105,15 @@ func WaitForAnyObservee(wg *sync.WaitGroup, observees []Observee) int {
 	return WaitForAny(channels)
 }
 
-func WaitAndStopObservees(wg *sync.WaitGroup, observees []Observee) int {
-	choice := WaitForAnyObservee(wg, observees)
-	// Stop objects in the reverse order they have been started.
+func ReverseStopObservees(observees []Observee) {
 	for i := len(observees) - 1; i >= 0; i-- {
 		observees[i].Stop()
 	}
+}
+
+func WaitAndStopObservees(wg *sync.WaitGroup, observees []Observee) int {
+	choice := WaitForAnyObservee(wg, observees)
+	ReverseStopObservees(observees)
 	return choice
 }
 
