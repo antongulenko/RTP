@@ -38,7 +38,8 @@ func main() {
 
 	log.Println("Listening to PCP on " + local_addr)
 	log.Println("Press Ctrl-C to interrupt")
-	<-ExternalInterrupt()
-
-	proxy.Stop()
+	WaitAndStopObservees(nil, []Observee{
+		proxy,
+		&NoopObservee{ExternalInterrupt()},
+	})
 }

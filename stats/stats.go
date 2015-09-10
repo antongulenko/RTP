@@ -143,14 +143,11 @@ func (stats *Stats) String() string {
 	return ps
 }
 
-func LoopPrintStats(secondsTimeout, secondsPeriod uint, stats []*Stats) {
-	for {
-		time.Sleep(time.Duration(secondsTimeout) * time.Second)
-		fmt.Println("==============")
-		for _, stats := range stats {
-			stats.Flush(secondsPeriod)
-			fmt.Println(stats.String())
-		}
+func PrintStats(secondsPeriod uint, stats []*Stats) {
+	fmt.Println("==============")
+	for _, stats := range stats {
+		stats.Flush(secondsPeriod)
+		fmt.Println(stats.String())
 	}
 }
 

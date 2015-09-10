@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"sync"
+
+	"github.com/antongulenko/RTP/helpers"
 )
 
 const (
@@ -13,7 +15,7 @@ const (
 )
 
 type Server struct {
-	stopOnce   sync.Once
+	stopped    *helpers.OneshotCondition
 	listenConn *net.UDPConn
 	errors     chan error
 	handler    ServerHandler
@@ -23,12 +25,15 @@ type Server struct {
 }
 
 type ServerHandler interface {
-	ReceivePacket(conn *net.UDPConn) (*Packet, error)
+	Protocol
 	HandleRequest(request *Packet)
 	StopServer()
 }
 
 func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
+	if handler == nil {
+		return nil, fmt.Errorf("Need non-nil ServerHandler")
+	}
 	udpAddr, err := net.ResolveUDPAddr("udp", local_addr)
 	if err != nil {
 		return nil, err
@@ -42,6 +47,7 @@ func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
 		handler:    handler,
 		listenConn: listenConn,
 		errors:     make(chan error, ErrorChanBuffer),
+		stopped:    helpers.NewOneshotCondition(),
 	}, nil
 }
 
@@ -54,8 +60,12 @@ func (server *Server) Start() {
 	go server.listen()
 }
 
+func (server *Server) Observe(wg *sync.WaitGroup) <-chan interface{} {
+	return server.stopped.Observe(wg)
+}
+
 func (server *Server) Stop() {
-	server.stopOnce.Do(func() {
+	server.stopped.Enable(func() {
 		server.Stopped = true
 		server.listenConn.Close()
 		server.handler.StopServer()
@@ -69,7 +79,7 @@ func (server *Server) listen() {
 		if server.Stopped {
 			return
 		}
-		packet, err := server.handler.ReceivePacket(server.listenConn)
+		packet, err := receivePacket(server.listenConn, 0, server.handler)
 		if err != nil {
 			if server.Stopped {
 				return // error because of read from closed connection
@@ -94,7 +104,7 @@ func (server *Server) handle(request *Packet) {
 
 func (server *Server) Reply(request *Packet, code uint, value interface{}) {
 	packet := Packet{Code: code, Val: value}
-	err := packet.SendPacketTo(server.listenConn, request.SourceAddr)
+	err := packet.sendPacket(server.listenConn, request.SourceAddr, server.handler)
 	if err != nil {
 		server.LogError(fmt.Errorf("Failed to send reply: %v", err))
 	}
@@ -109,7 +119,7 @@ func (server *Server) ReplyCheck(request *Packet, err error) {
 }
 
 func (server *Server) ReplyOK(request *Packet) {
-	server.Reply(request, PacketOK.Code, "")
+	server.Reply(request, CodeOK, "")
 }
 
 func (server *Server) ReplyError(request *Packet, err error) {

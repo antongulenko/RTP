@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/rtpClient"
 )
@@ -19,29 +20,31 @@ const (
 )
 
 type AmpProxy struct {
-	*amp.AmpServer
+	*amp.Server
 
 	rtspURL   *url.URL
 	proxyHost string
-	sessions  map[string]*proxySession
+	sessions  map[string]*streamSession
 
-	RtspStartedCallback func(rtsp *rtpClient.RtspClient)
-	RtspEndedCallback   func(rtsp *rtpClient.RtspClient)
+	StreamStartedCallback func(rtsp *helpers.Command, proxies []*UdpProxy)
+	StreamStoppedCallback func(rtsp *helpers.Command, proxies []*UdpProxy)
 }
 
-type proxySession struct {
-	backend   *rtpClient.RtspClient
+type streamSession struct {
+	backend   *helpers.Command
 	rtpProxy  *UdpProxy
 	rtcpProxy *UdpProxy
 	port      int
 	mediaFile string
 	client    string
+	proxy     *AmpProxy
+	stopped   *helpers.OneshotCondition
 }
 
 // ampAddr: address to listen on for AMP requests
 // rtspURL: base URL used when sending RTSP requests to the backend media server
 // localProxyIP: address to receive RTP/RTCP packets from the media server
-func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (*AmpProxy, error) {
+func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (proxy *AmpProxy, err error) {
 	u, err := url.Parse(rtspURL)
 	if err != nil {
 		return nil, err
@@ -55,35 +58,56 @@ func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (*AmpProxy, error) {
 		return nil, fmt.Errorf("Failed to resolve IP address %v: %v", localProxyIP, err)
 	}
 
-	proxy := &AmpProxy{
+	proxy = &AmpProxy{
 		rtspURL:   u,
 		proxyHost: ip.String(),
-		sessions:  make(map[string]*proxySession),
+		sessions:  make(map[string]*streamSession),
 	}
-	proxy.AmpServer, err = amp.NewAmpServer(local_addr, proxy)
+	proxy.Server, err = amp.NewServer(local_addr, proxy)
 	if err != nil {
-		return nil, err
+		proxy = nil
 	}
-	return proxy, nil
+	return
 }
 
 func (proxy *AmpProxy) StopServer() {
 	for _, session := range proxy.sessions {
-		proxy.cleanupSession(session)
+		session.Stop()
 	}
 }
 
-func (proxy *AmpProxy) StartSession(desc *amp.StartSessionValue) error {
-	client := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port))
+func (proxy *AmpProxy) StartStream(desc *amp.StartStream) error {
+	client := desc.Client()
 	_, ok := proxy.sessions[client]
 	if ok {
 		return fmt.Errorf("Session already exists for client %v", client)
 	}
 
+	session, err := proxy.newStreamSession(desc)
+	if err != nil {
+		return err
+	}
+	proxy.sessions[client] = session
+	session.Start()
+	return nil
+}
+
+func (proxy *AmpProxy) StopStream(desc *amp.StopStream) error {
+	client := desc.Client()
+	session, ok := proxy.sessions[client]
+	if !ok {
+		return fmt.Errorf("Session not found for client %v", client)
+	}
+	session.Stop()
+	return nil
+}
+
+func (proxy *AmpProxy) newStreamSession(desc *amp.StartStream) (*streamSession, error) {
+	client := desc.Client()
 	rtcpClient := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port+1))
 	rtpProxy, rtcpProxy, err := NewUdpProxyPair(proxy.proxyHost, client, rtcpClient, minPort, maxPort)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	rtpProxy.Start()
 	rtcpProxy.Start()
@@ -93,49 +117,47 @@ func (proxy *AmpProxy) StartSession(desc *amp.StartSessionValue) error {
 	logfile := fmt.Sprintf("amp-proxy-%v-%v.log", rtpPort, desc.MediaFile)
 	rtsp, err := rtpClient.StartRtspClient(mediaURL.String(), rtpPort, logfile)
 	if err != nil {
-		return fmt.Errorf("Failed to start RTSP client: %v", err)
+		return nil, fmt.Errorf("Failed to start RTSP client: %v", err)
 	}
-	session := &proxySession{
+	return &streamSession{
 		backend:   rtsp,
 		mediaFile: desc.MediaFile,
 		port:      desc.Port,
 		rtpProxy:  rtpProxy,
 		rtcpProxy: rtcpProxy,
 		client:    client,
-	}
-	proxy.sessions[client] = session
-	proxy.observe(session)
-	return nil
+		proxy:     proxy,
+		stopped:   helpers.NewOneshotCondition(),
+	}, nil
 }
 
-func (proxy *AmpProxy) StopSession(desc *amp.StopSessionValue) error {
-	client := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port))
-	session, ok := proxy.sessions[client]
-	if !ok {
-		return fmt.Errorf("Session not found for client %v", client)
-	}
-	proxy.cleanupSession(session)
-	return nil
+func (session *streamSession) proxies() []*UdpProxy {
+	return []*UdpProxy{session.rtpProxy, session.rtcpProxy}
 }
 
-func (proxy *AmpProxy) cleanupSession(session *proxySession) {
-	session.backend.Stop()
-	session.rtpProxy.Close()
-	session.rtcpProxy.Close()
-	delete(proxy.sessions, session.client)
-}
-
-func (proxy *AmpProxy) observe(session *proxySession) {
-	rtsp := session.backend
-	if proxy.RtspStartedCallback != nil {
-		proxy.RtspStartedCallback(rtsp)
+func (session *streamSession) Start() {
+	if session.proxy.StreamStartedCallback != nil {
+		session.proxy.StreamStartedCallback(session.backend, session.proxies())
 	}
-	c := rtsp.Observe(proxy.Wg)
+	observees := []helpers.Observee{session.backend, session.rtpProxy, session.rtcpProxy}
 	go func() {
-		<-c
-		if proxy.RtspEndedCallback != nil {
-			proxy.RtspEndedCallback(rtsp)
-		}
-		proxy.cleanupSession(session)
+		helpers.WaitForAnyObservee(session.proxy.Wg, observees)
+		session.Stop()
 	}()
+}
+
+func (session *streamSession) Stop() {
+	session.stopped.Enable(func() {
+		session.backend.Stop()
+		for _, p := range session.proxies() {
+			p.Stop()
+			if p.Err != nil {
+				session.proxy.LogError(fmt.Errorf("Proxy %s error: %v", p, p.Err))
+			}
+		}
+		delete(session.proxy.sessions, session.client)
+		if session.proxy.StreamStoppedCallback != nil {
+			session.proxy.StreamStoppedCallback(session.backend, session.proxies())
+		}
+	})
 }

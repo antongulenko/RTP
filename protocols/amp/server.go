@@ -2,24 +2,27 @@ package amp
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/antongulenko/RTP/protocols"
 )
 
-type AmpServer struct {
+type Server struct {
 	*protocols.Server
-	handler AmpHandler
+	*ampProtocol
+	handler Handler
 }
 
-type AmpHandler interface {
-	StartSession(val *StartSessionValue) error
-	StopSession(val *StopSessionValue) error
+type Handler interface {
+	StartStream(val *StartStream) error
+	StopStream(val *StopStream) error
 	StopServer()
 }
 
-func NewAmpServer(local_addr string, handler AmpHandler) (server *AmpServer, err error) {
-	server = &AmpServer{handler: handler}
+func NewServer(local_addr string, handler Handler) (server *Server, err error) {
+	if handler == nil {
+		return nil, fmt.Errorf("Need non-nil amp.Handler")
+	}
+	server = &Server{handler: handler}
 	server.Server, err = protocols.NewServer(local_addr, server)
 	if err != nil {
 		server = nil
@@ -27,32 +30,24 @@ func NewAmpServer(local_addr string, handler AmpHandler) (server *AmpServer, err
 	return
 }
 
-func (server *AmpServer) StopServer() {
+func (server *Server) StopServer() {
 	server.handler.StopServer()
 }
 
-func (server *AmpServer) ReceivePacket(conn *net.UDPConn) (*protocols.Packet, error) {
-	packet, err := ReceivePacket(conn)
-	if err != nil {
-		return nil, err
-	}
-	return packet.Packet, err
-}
-
-func (server *AmpServer) HandleRequest(request *protocols.Packet) {
-	packet := &AmpPacket{request}
+func (server *Server) HandleRequest(packet *protocols.Packet) {
+	val := packet.Val
 	switch packet.Code {
-	case CodeStartSession:
-		if desc := packet.StartSession(); desc == nil {
-			server.ReplyError(packet.Packet, fmt.Errorf("Illegal value for AMP CodeStartSession: %v", packet.Val))
+	case CodeStartStream:
+		if desc, ok := val.(*StartStream); ok {
+			server.ReplyCheck(packet, server.handler.StartStream(desc))
 		} else {
-			server.ReplyCheck(packet.Packet, server.handler.StartSession(desc))
+			server.ReplyError(packet, fmt.Errorf("Illegal value for AMP StartStream: %v", packet.Val))
 		}
-	case CodeStopSession:
-		if desc := packet.StopSession(); desc == nil {
-			server.ReplyError(packet.Packet, fmt.Errorf("Illegal value for AMP CodeStopSession: %v", packet.Val))
+	case CodeStopStream:
+		if desc, ok := val.(*StopStream); ok {
+			server.ReplyCheck(packet, server.handler.StopStream(desc))
 		} else {
-			server.ReplyCheck(packet.Packet, server.handler.StopSession(desc))
+			server.ReplyError(packet, fmt.Errorf("Illegal value for AMP StopStream: %v", packet.Val))
 		}
 	default:
 		server.LogError(fmt.Errorf("Received unexpected AMP code: %v", packet.Code))

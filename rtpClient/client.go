@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/stats"
 	"github.com/antongulenko/gortp"
 )
@@ -14,7 +15,8 @@ const (
 )
 
 type RtpClient struct {
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	stopped *helpers.OneshotCondition
 
 	listenPort     int
 	sequenceNumber uint16
@@ -53,6 +55,7 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 		RtpSession:   session,
 		ctrlChan:     session.CreateCtrlEventChan(rtpCtrlBuffer),
 		dataChan:     session.CreateDataReceiveChan(rtpDataBuffer),
+		stopped:      helpers.NewOneshotCondition(),
 	}
 
 	client.wg.Add(1)
@@ -64,21 +67,20 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 }
 
 func (client *RtpClient) Stop() {
-	client.ReceiveStats.Stop()
-	client.MissedStats.Stop()
-	client.RtpSession.CloseSession()
-	close(client.dataChan)
-	close(client.ctrlChan)
-	client.wg.Wait()
-}
-
-func (client *RtpClient) RequestRtsp(rtspUrl string, proxyPort int, logfile string) (*RtspClient, error) {
-	if proxyPort == 0 {
-		proxyPort = client.listenPort
+	if client == nil {
+		return
 	}
-	return StartRtspClient(rtspUrl, proxyPort, logfile)
+	client.stopped.Enable(func() {
+		client.ReceiveStats.Stop()
+		client.CtrlStats.Stop()
+		client.MissedStats.Stop()
+		client.RtpSession.CloseSession()
+		close(client.dataChan)
+		close(client.ctrlChan)
+		client.wg.Wait()
+	})
 }
 
-func (client *RtpClient) ObserveRtsp(rtsp *RtspClient) <-chan interface{} {
-	return rtsp.Observe(&client.wg)
+func (client *RtpClient) Observe(wg *sync.WaitGroup) <-chan interface{} {
+	return client.stopped.Observe(wg)
 }
