@@ -30,7 +30,7 @@ func makeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
 }
 
 func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Checkerr(client.StopProxy(proxyAddrs(listenPort, targetPort)))
+	Printerr(client.StopProxy(proxyAddrs(listenPort, targetPort)))
 }
 
 func startProxies(rtp_port int) int {

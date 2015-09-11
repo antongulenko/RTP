@@ -22,6 +22,8 @@ func main() {
 	Checkerr(err)
 
 	go printAmpErrors(balancer)
+	err = balancer.AddMediaServer("127.0.0.1:7777")
+	Checkerr(err)
 	balancer.Start()
 
 	log.Println("Listening to AMP on " + amp_addr)

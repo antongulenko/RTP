@@ -97,6 +97,10 @@ func (command *Command) Stop() {
 	command.Proc.Signal(syscall.SIGHUP)
 }
 
+func (command *Command) Success() bool {
+	return command.StateErr != nil || (command.State != nil && command.State.Success())
+}
+
 func (command *Command) StateString() string {
 	if err := command.checkStarted(); err != nil {
 		return err.Error()

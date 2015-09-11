@@ -2,30 +2,31 @@ package proxies
 
 import (
 	"fmt"
-	"net"
-	"strconv"
 
 	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/pcp"
 )
 
 type PcpProxy struct {
 	*pcp.Server
-	sessions map[int]*udpSession
+	sessions protocols.Sessions
 
 	ProxyStartedCallback func(proxy *UdpProxy)
 	ProxyStoppedCallback func(proxy *UdpProxy)
 }
 
 type udpSession struct {
-	udp     *UdpProxy
-	port    int
-	stopped *helpers.OneshotCondition
+	*protocols.SessionBase
+
+	udp   *UdpProxy
+	port  int
+	proxy *PcpProxy
 }
 
 func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
 	proxy = &PcpProxy{
-		sessions: make(map[int]*udpSession),
+		sessions: make(protocols.Sessions),
 	}
 	proxy.Server, err = pcp.NewServer(pcpAddr, proxy)
 	if err != nil {
@@ -35,21 +36,11 @@ func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
 }
 
 func (proxy *PcpProxy) StopServer() {
-	for _, session := range proxy.sessions {
-		proxy.cleanupSession(session)
-	}
-}
-
-func getPort(addr string) (int, error) {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return 0, fmt.Errorf("Failed to parse ListenAddr: %v", err)
-	}
-	return strconv.Atoi(port)
+	proxy.sessions.StopSessions()
 }
 
 func (proxy *PcpProxy) StartProxy(desc *pcp.StartProxy) error {
-	port, err := getPort(desc.ListenAddr)
+	port, err := desc.ListenPort()
 	if err != nil {
 		return err
 	}
@@ -62,44 +53,41 @@ func (proxy *PcpProxy) StartProxy(desc *pcp.StartProxy) error {
 		return err
 	}
 	session := &udpSession{
-		udp:     udp,
-		port:    port,
-		stopped: helpers.NewOneshotCondition(),
+		udp:   udp,
+		port:  port,
+		proxy: proxy,
 	}
-	proxy.sessions[port] = session
-	udp.Start()
-	go func() {
-		<-udp.Observe(proxy.Wg)
-		proxy.cleanupSession(session)
-	}()
-	if proxy.ProxyStartedCallback != nil {
-		proxy.ProxyStartedCallback(udp)
-	}
+	session.SessionBase = proxy.sessions.NewSession(port, session)
 	return nil
 }
 
 func (proxy *PcpProxy) StopProxy(desc *pcp.StopProxy) error {
-	port, err := getPort(desc.ListenAddr)
+	port, err := desc.ListenPort()
 	if err != nil {
 		return err
 	}
-	if session, ok := proxy.sessions[port]; !ok {
-		return fmt.Errorf("No UDP proxy running for port %v", port)
-	} else {
-		proxy.cleanupSession(session)
-	}
-	return nil
+	return proxy.sessions.StopSession(port)
 }
 
-func (proxy *PcpProxy) cleanupSession(session *udpSession) {
-	session.stopped.Enable(func() {
-		session.udp.Stop()
-		if session.udp.Err != nil {
-			proxy.LogError(fmt.Errorf("UDP proxy error: %v", session.udp.Err))
-		}
-		if proxy.ProxyStoppedCallback != nil {
-			proxy.ProxyStoppedCallback(session.udp)
-		}
-		delete(proxy.sessions, session.port)
-	})
+func (session *udpSession) Observees() []helpers.Observee {
+	return []helpers.Observee{
+		session.udp,
+	}
+}
+
+func (session *udpSession) Start() {
+	session.udp.Start()
+	if session.proxy.ProxyStartedCallback != nil {
+		session.proxy.ProxyStartedCallback(session.udp)
+	}
+}
+
+func (session *udpSession) Cleanup() {
+	if session.udp.Err != nil {
+		session.CleanupErr = session.udp.Err
+		session.proxy.LogError(fmt.Errorf("UDP proxy error: %v", session.udp.Err))
+	}
+	if session.proxy.ProxyStoppedCallback != nil {
+		session.proxy.ProxyStoppedCallback(session.udp)
+	}
 }

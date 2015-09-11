@@ -29,6 +29,7 @@ func (obs *NoopObservee) Stop() {
 
 type cleanupObservee struct {
 	cleanup func()
+	once    sync.Once
 }
 
 func CleanupObservee(cleanup func()) Observee {
@@ -40,7 +41,9 @@ func (obs *cleanupObservee) Observe(*sync.WaitGroup) <-chan interface{} {
 	return make(chan interface{}, 1) // Never triggered
 }
 func (obs *cleanupObservee) Stop() {
-	obs.cleanup()
+	obs.once.Do(func() {
+		obs.cleanup()
+	})
 }
 
 func LoopObservee(loop func()) Observee {

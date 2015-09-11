@@ -7,11 +7,17 @@ import (
 
 var (
 	ExitHook func()
+	exiting  bool
 )
 
 func Checkerr(err error) {
 	if err != nil {
-		log.Println("Error:", err)
+		if exiting {
+			log.Println("Recursive Checkerr:", err)
+			return
+		}
+		exiting = true
+		log.Println("Fatal Error:", err)
 		if ExitHook != nil {
 			ExitHook()
 		}
@@ -21,6 +27,6 @@ func Checkerr(err error) {
 
 func Printerr(err error) {
 	if err != nil {
-		log.Println("Error: ", err)
+		log.Println("Error:", err)
 	}
 }

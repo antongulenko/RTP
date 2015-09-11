@@ -6,6 +6,8 @@ package pcp
 import (
 	"encoding/gob"
 	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/antongulenko/RTP/protocols"
 )
@@ -15,12 +17,26 @@ const (
 	CodeStopProxy
 )
 
-type StartProxy struct {
+type ProxyDescription struct {
 	ListenAddr string
 	TargetAddr string
 }
 
-type StopProxy StartProxy
+type StartProxy struct {
+	ProxyDescription
+}
+
+type StopProxy struct {
+	ProxyDescription
+}
+
+func (desc *ProxyDescription) ListenPort() (int, error) {
+	_, port, err := net.SplitHostPort(desc.ListenAddr)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to parse ListenAddr: %v", err)
+	}
+	return strconv.Atoi(port)
+}
 
 type pcpProtocol struct {
 }

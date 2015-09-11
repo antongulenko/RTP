@@ -18,8 +18,10 @@ func NewClient(local_ip string) (client *Client, err error) {
 
 func (client *Client) StartProxy(listenAddr string, targetAddr string) error {
 	val := &StartProxy{
-		ListenAddr: listenAddr,
-		TargetAddr: targetAddr,
+		ProxyDescription{
+			ListenAddr: listenAddr,
+			TargetAddr: targetAddr,
+		},
 	}
 	reply, err := client.SendRequest(CodeStartProxy, val)
 	if err != nil {
@@ -30,8 +32,10 @@ func (client *Client) StartProxy(listenAddr string, targetAddr string) error {
 
 func (client *Client) StopProxy(listenAddr string, targetAddr string) error {
 	val := &StopProxy{
-		ListenAddr: listenAddr,
-		TargetAddr: targetAddr,
+		ProxyDescription{
+			ListenAddr: listenAddr,
+			TargetAddr: targetAddr,
+		},
 	}
 	reply, err := client.SendRequest(CodeStopProxy, val)
 	if err != nil {

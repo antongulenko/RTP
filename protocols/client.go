@@ -91,8 +91,10 @@ func (client *Client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 		}
 		reply, err = receivePacket(client.conn, 0, client.Protocol)
 		if err != nil {
-			err = fmt.Errorf("%s: %s", client.Protocol.Name(), err)
+			err = fmt.Errorf("Receiving %s reply: %s", client.Protocol.Name(), err)
 		}
+	} else {
+		err = fmt.Errorf("Sending %s request: %s", client.Protocol.Name(), err)
 	}
 	return
 }
