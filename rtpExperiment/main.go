@@ -31,7 +31,7 @@ const (
 	amp_server     = "127.0.0.1:7777"
 	amp_media_file = "Sample.264"
 
-	use_balancer = false
+	use_balancer = true
 	amp_balancer = "127.0.0.1:7779"
 
 	use_proxy       = true

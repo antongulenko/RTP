@@ -17,11 +17,21 @@ func printAmpErrors(balancer *proxies.AmpBalancer) {
 	}
 }
 
+func printSessionStarted(client string) {
+	log.Println("Started session for", client)
+}
+
+func printSessionStopped(client string) {
+	log.Println("Stopped session for", client)
+}
+
 func main() {
 	balancer, err := proxies.NewAmpBalancer(amp_addr)
 	Checkerr(err)
 
 	go printAmpErrors(balancer)
+	balancer.SessionStartedCallback = printSessionStarted
+	balancer.SessionStoppedCallback = printSessionStopped
 	err = balancer.AddMediaServer("127.0.0.1:7777")
 	Checkerr(err)
 	balancer.Start()
