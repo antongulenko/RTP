@@ -2,12 +2,17 @@ package protocols
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"time"
 )
 
 const (
 	DefaultTimeout = time.Second * 1
+)
+
+var (
+	pingRand = rand.New(rand.NewSource(time.Now().Unix()))
 )
 
 type Client struct {
@@ -91,10 +96,10 @@ func (client *Client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 		}
 		reply, err = receivePacket(client.conn, 0, client.Protocol)
 		if err != nil {
-			err = fmt.Errorf("Receiving %s reply: %s", client.Protocol.Name(), err)
+			err = fmt.Errorf("Receiving %s reply from %s: %s", client.Protocol.Name(), client.ServerAddr, err)
 		}
 	} else {
-		err = fmt.Errorf("Sending %s request: %s", client.Protocol.Name(), err)
+		err = fmt.Errorf("Sending %s request to %s: %s", client.Protocol.Name(), client.ServerAddr, err)
 	}
 	return
 }
@@ -111,6 +116,22 @@ func (client *Client) CheckReply(reply *Packet) error {
 		return fmt.Errorf("%v error: %v", client.Protocol.Name(), reply.Error())
 	} else if !reply.IsOK() {
 		return fmt.Errorf("Unexpected %v reply (code %v): %v", client.Protocol.Name(), reply.Code, reply.Val)
+	}
+	return nil
+}
+
+func (client *Client) Ping() error {
+	ping := &PingValue{pingRand.Int()}
+	reply, err := client.SendRequest(CodePing, ping)
+	if err != nil {
+		return err
+	}
+	pong, ok := reply.Val.(*PongValue)
+	if !ok {
+		return fmt.Errorf("Illegal Pong payload: %s", reply.Val)
+	}
+	if !pong.Check(ping) {
+		return fmt.Errorf("Server returned wrong Pong %s (expected %s)", pong.Value, ping.Pong())
 	}
 	return nil
 }

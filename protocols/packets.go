@@ -11,8 +11,26 @@ import (
 const (
 	CodeOK = 10 + iota
 	CodeError
+	CodePing
+	CodePong
 	CodeOther
 )
+
+type PingValue struct {
+	Value int
+}
+
+type PongValue struct {
+	Value int
+}
+
+func (ping *PingValue) Pong() int {
+	return ping.Value + 1
+}
+
+func (pong *PongValue) Check(ping *PingValue) bool {
+	return pong.Value == ping.Pong()
+}
 
 type Protocol interface {
 	DecodeValue(code uint, decoder *gob.Decoder) (interface{}, error)
@@ -56,6 +74,20 @@ func decodePacket(reader io.Reader, protocol Protocol) (*Packet, error) {
 		err = dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding %v Error value: %v", protocol.Name(), err)
+		}
+		packet.Val = val
+	case CodePing:
+		var val PingValue
+		err = dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding %v Ping value: %v", protocol.Name(), err)
+		}
+		packet.Val = val
+	case CodePong:
+		var val PongValue
+		err = dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding %v Pong value: %v", protocol.Name(), err)
 		}
 		packet.Val = val
 	default:

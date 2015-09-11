@@ -97,6 +97,15 @@ func (server *Server) handle(request *Packet) {
 		server.LogError(errors.New("Received standalone OK message"))
 	case CodeError:
 		server.LogError(fmt.Errorf("Received Error: %s", request.Error()))
+	case CodePong:
+		server.LogError(fmt.Errorf("Received standalone Pong message"))
+	case CodePing:
+		if ping, ok := request.Val.(*PingValue); !ok {
+			err := fmt.Errorf("%s Ping received with wrong payload: %s", server.handler.Name(), request.Val)
+			server.ReplyError(request, err)
+		} else {
+			server.Reply(request, CodePong, ping.Pong())
+		}
 	default:
 		server.handler.HandleRequest(request)
 	}
