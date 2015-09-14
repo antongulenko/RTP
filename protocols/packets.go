@@ -86,14 +86,14 @@ func decodePacket(reader io.Reader, protocol Protocol) (*Packet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding %v Ping value: %v", protocol.Name(), err)
 		}
-		packet.Val = val
+		packet.Val = &val
 	case CodePong:
 		var val PongValue
 		err = dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding %v Pong value: %v", protocol.Name(), err)
 		}
-		packet.Val = val
+		packet.Val = &val
 	default:
 		packet.Val, err = protocol.DecodeValue(packet.Code, dec)
 		if err != nil {

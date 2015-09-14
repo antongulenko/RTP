@@ -198,7 +198,7 @@ func (client *extendedClient) Ping() error {
 	if err = client.CheckError(reply); err != nil {
 		return err
 	}
-	pong, ok := reply.Val.(PongValue)
+	pong, ok := reply.Val.(*PongValue)
 	if !ok {
 		return fmt.Errorf("Illegal Pong payload: (%T) %s", reply.Val, reply.Val)
 	}
