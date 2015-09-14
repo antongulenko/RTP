@@ -97,7 +97,7 @@ func (balancer *AmpBalancer) newSession(desc *amp.StartStream) (*balancerSession
 	if err != nil {
 		return nil, err
 	}
-	client.Timeout = protocols.DefaultTimeout / 2 // Timeout before our client times out
+	client.SetTimeout(protocols.DefaultTimeout / 2) // Timeout before our client times out
 	session := &balancerSession{
 		clientAddr: clientAddr,
 		balancer:   balancer,

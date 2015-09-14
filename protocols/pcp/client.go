@@ -3,13 +3,13 @@ package pcp
 import "github.com/antongulenko/RTP/protocols"
 
 type Client struct {
-	*protocols.Client
+	protocols.ExtendedClient
 	*pcpProtocol
 }
 
 func NewClient(local_ip string) (client *Client, err error) {
 	client = new(Client)
-	client.Client, err = protocols.NewClient(local_ip, client)
+	client.ExtendedClient, err = protocols.NewExtendedClient(local_ip, client)
 	if err != nil {
 		client = nil
 	}
