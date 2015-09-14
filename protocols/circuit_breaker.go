@@ -12,6 +12,8 @@ const (
 	checkPeriod         = 200 * time.Millisecond
 )
 
+type CircuitBreakerCallback func(breaker CircuitBreaker)
+
 type CircuitBreaker interface {
 	ExtendedClient
 
@@ -20,7 +22,7 @@ type CircuitBreaker interface {
 	Error() error
 	Online() bool
 
-	SetStateChangedCallback(callback func(err error))
+	SetStateChangedCallback(callback CircuitBreakerCallback)
 }
 
 type circuitBreaker struct {
@@ -29,7 +31,7 @@ type circuitBreaker struct {
 	client   ExtendedClient
 	lastErr  error
 	lock     sync.Mutex
-	callback func(err error)
+	callback CircuitBreakerCallback
 }
 
 func NewCircuitBreaker(client ExtendedClient) CircuitBreaker {
@@ -70,7 +72,7 @@ func (breaker *circuitBreaker) invokeCallback(wasOnline bool) {
 	if breaker.callback != nil {
 		isOnline := breaker.lastErr == nil
 		if wasOnline != isOnline {
-			breaker.callback(breaker.lastErr)
+			breaker.callback(breaker)
 		}
 	}
 }
@@ -90,7 +92,7 @@ func (breaker *circuitBreaker) lockedOnline(execute func() error) bool {
 	return false
 }
 
-func (breaker *circuitBreaker) SetStateChangedCallback(callback func(err error)) {
+func (breaker *circuitBreaker) SetStateChangedCallback(callback CircuitBreakerCallback) {
 	breaker.callback = callback
 }
 

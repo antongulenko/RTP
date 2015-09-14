@@ -47,7 +47,7 @@ func NewAmpBalancer(local_addr string) (balancer *AmpBalancer, err error) {
 	return
 }
 
-func (balancer *AmpBalancer) AddMediaServer(addr string) (amp.CircuitBreaker, error) {
+func (balancer *AmpBalancer) AddMediaServer(addr string, stateCallback protocols.CircuitBreakerCallback) (amp.CircuitBreaker, error) {
 	serverAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
@@ -68,6 +68,7 @@ func (balancer *AmpBalancer) AddMediaServer(addr string) (amp.CircuitBreaker, er
 	if err != nil {
 		return nil, err
 	}
+	client.SetStateChangedCallback(stateCallback)
 	client.Start()
 	balancer.Servers = append(balancer.Servers, &MediaServer{
 		Addr:      serverAddr,
