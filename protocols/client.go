@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -17,8 +18,10 @@ var (
 
 type Client interface {
 	Close() error
+	Closed() bool
 
 	SetServer(server_addr string) error
+	Server() *net.UDPAddr
 	SetTimeout(timeout time.Duration)
 	Protocol() Protocol
 
@@ -36,11 +39,13 @@ type ExtendedClient interface {
 }
 
 type client struct {
-	serverAddr *net.UDPAddr
-	localAddr  *net.UDPAddr
-	protocol   Protocol
-	timeout    time.Duration
-	conn       *net.UDPConn
+	serverAddr  *net.UDPAddr
+	localAddr   *net.UDPAddr
+	protocol    Protocol
+	timeout     time.Duration
+	conn        *net.UDPConn
+	closed      bool
+	requestLock sync.Mutex
 }
 
 type extendedClient struct {
@@ -84,11 +89,23 @@ func NewExtendedClient(local_ip string, protocol Protocol) (result ExtendedClien
 }
 
 func (client *client) Close() error {
-	return client.conn.Close()
+	if !client.closed {
+		client.closed = true
+		return client.conn.Close()
+	}
+	return nil
+}
+
+func (client *client) Closed() bool {
+	return client.closed
 }
 
 func (client *client) Protocol() Protocol {
 	return client.protocol
+}
+
+func (client *client) Server() *net.UDPAddr {
+	return client.serverAddr
 }
 
 func (client *client) SetTimeout(timeout time.Duration) {
@@ -122,6 +139,8 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 	if err = client.checkServer(); err != nil {
 		return
 	}
+	client.requestLock.Lock()
+	defer client.requestLock.Unlock()
 	if err = packet.sendPacket(client.conn, client.serverAddr, client.protocol); err == nil {
 		if client.timeout != 0 {
 			var zeroTime time.Time
@@ -154,24 +173,34 @@ func (client *extendedClient) SendRequest(code uint, val interface{}) (*Packet, 
 	})
 }
 
-func (client *extendedClient) CheckReply(reply *Packet) error {
+func (client *extendedClient) CheckError(reply *Packet) error {
 	if reply.IsError() {
 		return fmt.Errorf("%v error: %v", client.Protocol().Name(), reply.Error())
+	}
+	return nil
+}
+
+func (client *extendedClient) CheckReply(reply *Packet) error {
+	if err := client.CheckError(reply); err != nil {
+		return err
 	} else if !reply.IsOK() {
-		return fmt.Errorf("Unexpected %v reply (code %v): %v", client.Protocol().Name(), reply.Code, reply.Val)
+		return fmt.Errorf("Expected %v OK reply, got code %v instead: %v", client.Protocol().Name(), reply.Code, reply.Val)
 	}
 	return nil
 }
 
 func (client *extendedClient) Ping() error {
-	ping := &PingValue{pingRand.Int()}
+	ping := &PingValue{Value: pingRand.Int()}
 	reply, err := client.SendRequest(CodePing, ping)
 	if err != nil {
 		return err
 	}
-	pong, ok := reply.Val.(*PongValue)
+	if err = client.CheckError(reply); err != nil {
+		return err
+	}
+	pong, ok := reply.Val.(PongValue)
 	if !ok {
-		return fmt.Errorf("Illegal Pong payload: %s", reply.Val)
+		return fmt.Errorf("Illegal Pong payload: (%T) %s", reply.Val, reply.Val)
 	}
 	if !pong.Check(ping) {
 		return fmt.Errorf("Server returned wrong Pong %s (expected %s)", pong.Value, ping.Pong())

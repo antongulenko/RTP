@@ -92,6 +92,7 @@ func (server *Server) listen() {
 }
 
 func (server *Server) handle(request *Packet) {
+	val := request.Val
 	switch request.Code {
 	case CodeOK:
 		server.LogError(errors.New("Received standalone OK message"))
@@ -100,11 +101,11 @@ func (server *Server) handle(request *Packet) {
 	case CodePong:
 		server.LogError(fmt.Errorf("Received standalone Pong message"))
 	case CodePing:
-		if ping, ok := request.Val.(*PingValue); !ok {
-			err := fmt.Errorf("%s Ping received with wrong payload: %s", server.handler.Name(), request.Val)
-			server.ReplyError(request, err)
+		if ping, ok := val.(PingValue); ok {
+			server.Reply(request, CodePong, ping.PongValue())
 		} else {
-			server.Reply(request, CodePong, ping.Pong())
+			err := fmt.Errorf("%s Ping received with wrong payload: (%T) %v", server.handler.Name(), val, val)
+			server.ReplyError(request, err)
 		}
 	default:
 		server.handler.HandleRequest(request)

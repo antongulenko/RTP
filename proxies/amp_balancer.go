@@ -15,21 +15,22 @@ type AmpBalancer struct {
 
 	Servers []*MediaServer
 
-	SessionStartedCallback func(client string)
-	SessionStoppedCallback func(client string)
+	SessionStartedCallback func(client, server string)
+	SessionStoppedCallback func(client, server string)
 }
 
 type MediaServer struct {
 	Addr      *net.UDPAddr
 	LocalAddr *net.UDPAddr
+	Client    amp.CircuitBreaker
 }
 
 type balancerSession struct {
 	base       *protocols.SessionBase
 	clientAddr string
-	client     *amp.Client
-	balancer   *AmpBalancer
-	server     *MediaServer
+
+	balancer *AmpBalancer
+	server   *MediaServer
 
 	startDesc *amp.StartStream
 }
@@ -46,28 +47,43 @@ func NewAmpBalancer(local_addr string) (balancer *AmpBalancer, err error) {
 	return
 }
 
-func (balancer *AmpBalancer) AddMediaServer(addr string) error {
+func (balancer *AmpBalancer) AddMediaServer(addr string) (amp.CircuitBreaker, error) {
 	serverAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	conn, err := net.DialUDP("udp", nil, serverAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
-		return fmt.Errorf("Failed to convert to net.UDPAddr: %v", conn.LocalAddr())
+		return nil, fmt.Errorf("Failed to convert to net.UDPAddr: %v", conn.LocalAddr())
 	}
+	client, err := amp.NewCircuitBreaker(localAddr.IP.String())
+	if err != nil {
+		return nil, err
+	}
+	err = client.SetServer(serverAddr.String())
+	if err != nil {
+		return nil, err
+	}
+	client.Start()
 	balancer.Servers = append(balancer.Servers, &MediaServer{
 		Addr:      serverAddr,
 		LocalAddr: localAddr,
+		Client:    client,
 	})
-	return nil
+	return client, nil
 }
 
 func (balancer *AmpBalancer) StopServer() {
 	balancer.sessions.StopSessions()
+	for _, server := range balancer.Servers {
+		if err := server.Client.Close(); err != nil {
+			balancer.LogError(fmt.Errorf("Error closing connection to %v: %v", server.Addr, err))
+		}
+	}
 }
 
 func (balancer *AmpBalancer) StartStream(desc *amp.StartStream) error {
@@ -89,23 +105,13 @@ func (balancer *AmpBalancer) newSession(desc *amp.StartStream) (*balancerSession
 	if server == nil {
 		return nil, fmt.Errorf("No server available to handle your request")
 	}
-	client, err := amp.NewClient(server.LocalAddr.IP.String())
-	if err != nil {
-		return nil, err
-	}
-	err = client.SetServer(server.Addr.String())
-	if err != nil {
-		return nil, err
-	}
-	client.SetTimeout(protocols.DefaultTimeout / 2) // Timeout before our client times out
 	session := &balancerSession{
 		clientAddr: clientAddr,
 		balancer:   balancer,
 		server:     server,
-		client:     client,
+		startDesc:  desc,
 	}
-	err = session.startRemoteSession(desc)
-	if err != nil {
+	if err := session.startRemoteSession(desc); err != nil {
 		return nil, fmt.Errorf("Error delegating request: %v", err)
 	}
 	return session, nil
@@ -113,10 +119,12 @@ func (balancer *AmpBalancer) newSession(desc *amp.StartStream) (*balancerSession
 
 func (balancer *AmpBalancer) pickServer(client string) *MediaServer {
 	// TODO implement load balancing
-	if len(balancer.Servers) == 0 {
-		return nil
+	for _, server := range balancer.Servers {
+		if server.Client.Online() {
+			return server
+		}
 	}
-	return balancer.Servers[0]
+	return nil
 }
 
 func (balancer *AmpBalancer) StopStream(desc *amp.StopStream) error {
@@ -129,7 +137,7 @@ func (session *balancerSession) Observees() []helpers.Observee {
 
 func (session *balancerSession) Start() {
 	if session.balancer.SessionStartedCallback != nil {
-		session.balancer.SessionStartedCallback(session.clientAddr)
+		session.balancer.SessionStartedCallback(session.clientAddr, session.server.Addr.String())
 	}
 }
 
@@ -139,18 +147,14 @@ func (session *balancerSession) Cleanup() {
 		session.base.CleanupErr = fmt.Errorf("Error stopping remote session: %v", err)
 	}
 	if session.balancer.SessionStoppedCallback != nil {
-		session.balancer.SessionStoppedCallback(session.clientAddr)
+		session.balancer.SessionStoppedCallback(session.clientAddr, session.server.Addr.String())
 	}
 }
 
 func (session *balancerSession) startRemoteSession(desc *amp.StartStream) error {
-	if session.startDesc != nil {
-		return fmt.Errorf("Session for %s has already been started!", session.clientAddr)
-	}
-	session.startDesc = desc
-	return session.client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
+	return session.server.Client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
 }
 
 func (session *balancerSession) stopRemoteSession() error {
-	return session.client.StopStream(session.startDesc.ReceiverHost, session.startDesc.Port)
+	return session.server.Client.StopStream(session.startDesc.ReceiverHost, session.startDesc.Port)
 }

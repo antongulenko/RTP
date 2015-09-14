@@ -7,6 +7,12 @@ type Client struct {
 	*pcpProtocol
 }
 
+type CircuitBreaker interface {
+	protocols.CircuitBreaker
+	StartProxy(listenAddr string, targetAddr string) error
+	StopProxy(listenAddr string, targetAddr string) error
+}
+
 func NewClient(local_ip string) (client *Client, err error) {
 	client = new(Client)
 	client.ExtendedClient, err = protocols.NewExtendedClient(local_ip, client)
@@ -14,6 +20,27 @@ func NewClient(local_ip string) (client *Client, err error) {
 		client = nil
 	}
 	return
+}
+
+type circuitBreaker struct {
+	protocols.CircuitBreaker
+	*Client
+}
+
+func NewCircuitBreaker(local_ip string) (CircuitBreaker, error) {
+	proto := new(pcpProtocol)
+	baseClient, err := protocols.NewExtendedClient(local_ip, proto)
+	if err != nil {
+		return nil, err
+	}
+	breaker := protocols.NewCircuitBreaker(baseClient)
+	return &circuitBreaker{
+		CircuitBreaker: breaker,
+		Client: &Client{
+			ExtendedClient: breaker,
+			pcpProtocol:    proto,
+		},
+	}, nil
 }
 
 func (client *Client) StartProxy(listenAddr string, targetAddr string) error {

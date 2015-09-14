@@ -24,6 +24,10 @@ type PongValue struct {
 	Value int
 }
 
+func (ping *PingValue) PongValue() PongValue {
+	return PongValue{ping.Pong()}
+}
+
 func (ping *PingValue) Pong() int {
 	return ping.Value + 1
 }
