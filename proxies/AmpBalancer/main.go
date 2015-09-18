@@ -5,25 +5,25 @@ import (
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
-	"github.com/antongulenko/RTP/proxies"
+	"github.com/antongulenko/RTP/proxies/amp_balancer"
 )
 
 const (
 	amp_addr = "127.0.0.1:7779"
 )
 
-func printAmpErrors(balancer *proxies.AmpBalancer) {
+func printAmpErrors(balancer *amp_balancer.AmpBalancer) {
 	for err := range balancer.Errors() {
 		log.Println("AMP error: " + err.Error())
 	}
 }
 
-func printSessionStarted(client, server string) {
-	log.Println("Started session for", client, "at", server)
+func printSessionStarted(client string) {
+	log.Println("Started session for", client)
 }
 
-func printSessionStopped(client, server string) {
-	log.Println("Stopped session for", client, "at", server)
+func printSessionStopped(client string) {
+	log.Println("Stopped session for", client)
 }
 
 func stateChangePrinter(breaker protocols.CircuitBreaker) {
@@ -36,14 +36,17 @@ func stateChangePrinter(breaker protocols.CircuitBreaker) {
 }
 
 func main() {
-	balancer, err := proxies.NewAmpBalancer(amp_addr)
+	ampPlugin := amp_balancer.NewAmpPlugin()
+	err := ampPlugin.AddMediaServer("127.0.0.1:7777", stateChangePrinter)
 	Checkerr(err)
+
+	balancer, err := amp_balancer.NewAmpBalancer(amp_addr)
+	Checkerr(err)
+	balancer.AddPlugin(ampPlugin)
 
 	go printAmpErrors(balancer)
 	balancer.SessionStartedCallback = printSessionStarted
 	balancer.SessionStoppedCallback = printSessionStopped
-	_, err = balancer.AddMediaServer("127.0.0.1:7777", stateChangePrinter)
-	Checkerr(err)
 
 	balancer.Start()
 
