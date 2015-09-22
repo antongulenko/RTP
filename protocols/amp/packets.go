@@ -15,6 +15,7 @@ import (
 const (
 	CodeStartStream = protocols.CodeOther + iota
 	CodeStopStream
+	CodeRedirectStream
 )
 
 type ClientDescription struct {
@@ -29,6 +30,11 @@ type StartStream struct {
 
 type StopStream struct {
 	ClientDescription
+}
+
+type RedirectStream struct {
+	OldClient ClientDescription
+	NewClient ClientDescription
 }
 
 func (client *ClientDescription) Client() string {
@@ -60,6 +66,13 @@ func (*AmpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error
 		err := dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding AMP StopStream value: %v", err)
+		}
+		return &val, nil
+	case CodeRedirectStream:
+		var val RedirectStream
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding AMP RedirectStream value: %v", err)
 		}
 		return &val, nil
 	default:

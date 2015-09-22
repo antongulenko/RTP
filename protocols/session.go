@@ -13,7 +13,7 @@ type SessionBase struct {
 	Wg         *sync.WaitGroup
 	Stopped    *helpers.OneshotCondition
 	CleanupErr error
-	session    Session
+	Session    Session
 }
 
 type Session interface {
@@ -26,7 +26,7 @@ func (sessions Sessions) NewSession(key interface{}, session Session) *SessionBa
 	base := &SessionBase{
 		Wg:      new(sync.WaitGroup),
 		Stopped: helpers.NewOneshotCondition(),
-		session: session,
+		Session: session,
 	}
 	sessions[key] = base
 	base.observe()
@@ -36,9 +36,23 @@ func (sessions Sessions) NewSession(key interface{}, session Session) *SessionBa
 
 func (sessions Sessions) Get(key interface{}) Session {
 	if base, ok := sessions[key]; ok {
-		return base.session
+		return base.Session
 	} else {
 		return nil
+	}
+}
+
+func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase, error) {
+	if session, ok := sessions[oldKey]; ok {
+		if _, ok := sessions[newKey]; ok {
+			return nil, fmt.Errorf("Session already exists for %v", newKey)
+		} else {
+			sessions[newKey] = session
+			delete(sessions, oldKey)
+			return session, nil
+		}
+	} else {
+		return nil, fmt.Errorf("No session found for %v", oldKey)
 	}
 }
 
@@ -72,21 +86,21 @@ func (sessions Sessions) StopSession(key interface{}) error {
 }
 
 func (base *SessionBase) observe() {
-	if len(base.session.Observees()) < 1 {
+	if len(base.Session.Observees()) < 1 {
 		return
 	}
 	go func() {
-		helpers.WaitForAnyObservee(base.Wg, base.session.Observees())
+		helpers.WaitForAnyObservee(base.Wg, base.Session.Observees())
 		base.Stop()
 	}()
 }
 
 func (base *SessionBase) Stop() {
 	base.Stopped.Enable(func() {
-		for _, observee := range base.session.Observees() {
+		for _, observee := range base.Session.Observees() {
 			observee.Stop()
 		}
 		base.Wg.Wait()
-		base.session.Cleanup()
+		base.Session.Cleanup()
 	})
 }

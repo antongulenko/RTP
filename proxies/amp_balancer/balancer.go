@@ -99,6 +99,10 @@ func (balancer *AmpBalancer) StopStream(desc *amp.StopStream) error {
 	return balancer.sessions.StopSession(desc.Client())
 }
 
+func (balancer *AmpBalancer) RedirectStream(val *RedirectStream) error {
+	return fmt.Errorf("AMP RedirectStream not implemented for the load balancer")
+}
+
 func (session *balancerSession) Observees() (result []helpers.Observee) {
 	for _, plugin := range session.plugins {
 		result = append(result, plugin.Observees()...)

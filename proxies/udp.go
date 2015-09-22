@@ -16,12 +16,13 @@ const (
 )
 
 type UdpProxy struct {
-	listenConn  *net.UDPConn
-	listenAddr  *net.UDPAddr
-	targetConn  *net.UDPConn
-	targetAddr  *net.UDPAddr
-	proxyClosed *helpers.OneshotCondition
-	packets     chan []byte
+	listenConn     *net.UDPConn
+	listenAddr     *net.UDPAddr
+	targetConn     *net.UDPConn
+	targetAddr     *net.UDPAddr
+	proxyClosed    *helpers.OneshotCondition
+	packets        chan []byte
+	targetConnLock sync.Mutex
 
 	Closed bool
 	Err    error
@@ -96,6 +97,25 @@ func (proxy *UdpProxy) Stop() {
 	proxy.doclose(nil)
 }
 
+func (proxy *UdpProxy) RedirectOutput(newTargetAddr string) error {
+	var targetUDP *net.UDPAddr
+	var err error
+	if targetUDP, err = net.ResolveUDPAddr("udp", newTargetAddr); err != nil {
+		return err
+	}
+	targetConn, err := net.DialUDP("udp", nil, targetUDP)
+	if err != nil {
+		return err
+	}
+
+	proxy.targetConnLock.Lock() // Don't close while write is in progress (?)
+	defer proxy.targetConnLock.Unlock()
+	proxy.targetConn.Close() // TODO Error is ignored ;/
+	proxy.targetAddr = targetUDP
+	proxy.targetConn = targetConn
+	return nil
+}
+
 func (proxy *UdpProxy) String() string {
 	return fmt.Sprintf("%v->%v", proxy.listenAddr, proxy.targetAddr)
 }
@@ -128,7 +148,9 @@ func (proxy *UdpProxy) readPackets() {
 
 func (proxy *UdpProxy) forwardPackets() {
 	for bytes := range proxy.packets {
+		proxy.targetConnLock.Lock()
 		sentbytes, err := proxy.targetConn.Write(bytes)
+		proxy.targetConnLock.Unlock()
 		if err != nil {
 			proxy.doclose(err)
 			return

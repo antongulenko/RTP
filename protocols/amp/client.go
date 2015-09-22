@@ -71,3 +71,21 @@ func (client *Client) StopStream(clientHost string, port int) error {
 	}
 	return client.CheckReply(reply)
 }
+
+func (client *Client) RedirectStream(oldHost string, oldPort int, newHost string, newPort int) error {
+	val := &RedirectStream{
+		OldClient: ClientDescription{
+			ReceiverHost: oldHost,
+			Port:         oldPort,
+		},
+		NewClient: ClientDescription{
+			ReceiverHost: newHost,
+			Port:         newPort,
+		},
+	}
+	reply, err := client.SendRequest(CodeRedirectStream, val)
+	if err != nil {
+		return err
+	}
+	return client.CheckReply(reply)
+}

@@ -114,7 +114,7 @@ func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyP
 
 func (proxy *PcpProxy) StopProxyPair(val *pcp.StopProxyPair) error {
 	return proxy.sessions.StopSession(val.ProxyPort1)
-	}
+}
 
 func (session *udpSession) Observees() []helpers.Observee {
 	return []helpers.Observee{

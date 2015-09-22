@@ -94,6 +94,40 @@ func (proxy *AmpProxy) StopStream(desc *amp.StopStream) error {
 	return proxy.sessions.StopSession(desc.Client())
 }
 
+func (proxy *AmpProxy) emergencyStopSession(client string, err error) error {
+	stopErr := proxy.sessions.StopSession(client)
+	if stopErr == nil {
+		return fmt.Errorf("Error redirecting session: %v. Session for %v was stopped.", err, client)
+	} else {
+		return fmt.Errorf("Error redirecting session: %v. Error stopping session for %v: %v", err, client, stopErr)
+	}
+}
+
+func (proxy *AmpProxy) RedirectStream(desc *amp.RedirectStream) error {
+	oldClient := desc.OldClient.Client()
+	newClient := desc.NewClient.Client()
+	sessionBase, err := proxy.sessions.ReKeySession(oldClient, newClient)
+	if err != nil {
+		return err
+	}
+	session, ok := sessionBase.Session.(*streamSession)
+	if !ok {
+		return proxy.emergencyStopSession(newClient, // Should never happen
+			fmt.Errorf("Illegal session type %T: %v", sessionBase, sessionBase))
+	}
+
+	err = session.rtpProxy.RedirectOutput(newClient)
+	if err != nil {
+		return proxy.emergencyStopSession(newClient, err)
+	}
+	newRtcpClient := net.JoinHostPort(desc.NewClient.ReceiverHost, strconv.Itoa(desc.NewClient.Port+1))
+	err = session.rtcpProxy.RedirectOutput(newRtcpClient)
+	if err != nil {
+		return proxy.emergencyStopSession(newClient, err)
+	}
+	return nil
+}
+
 func (proxy *AmpProxy) newStreamSession(desc *amp.StartStream) (*streamSession, error) {
 	client := desc.Client()
 	rtcpClient := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port+1))

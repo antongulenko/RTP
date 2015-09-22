@@ -13,9 +13,11 @@ type Server struct {
 }
 
 type Handler interface {
+	StopServer()
+
 	StartStream(val *StartStream) error
 	StopStream(val *StopStream) error
-	StopServer()
+	RedirectStream(val *RedirectStream) error
 }
 
 func NewServer(local_addr string, handler Handler) (server *Server, err error) {
@@ -48,6 +50,12 @@ func (server *Server) HandleRequest(packet *protocols.Packet) {
 			server.ReplyCheck(packet, server.handler.StopStream(desc))
 		} else {
 			server.ReplyError(packet, fmt.Errorf("Illegal value for AMP StopStream: %v", packet.Val))
+		}
+	case CodeRedirectStream:
+		if desc, ok := val.(*RedirectStream); ok {
+			server.ReplyCheck(packet, server.handler.RedirectStream(desc))
+		} else {
+			server.ReplyError(packet, fmt.Errorf("Illegal value for AMP RedirectStream: %v", packet.Val))
 		}
 	default:
 		server.LogError(fmt.Errorf("Received unexpected AMP code: %v", packet.Code))
