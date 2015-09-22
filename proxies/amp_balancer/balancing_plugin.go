@@ -16,7 +16,7 @@ type BalancingPlugin struct {
 
 type BalancingHandler interface {
 	NewClient(localAddr string) (protocols.CircuitBreaker, error)
-	NewBalancingSessionHandler(session *BalancingSession) BalancingSessionHandler
+	NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) // Modify desc if necessary, do not store it.
 	Protocol() protocols.Protocol
 }
 
@@ -26,15 +26,15 @@ type BackendServer struct {
 	Client    protocols.CircuitBreaker
 }
 
-type BalancingSession struct {
-	Server  *BackendServer
-	Desc    *amp.StartStream
-	handler BalancingSessionHandler
+type BalancingSession interface {
+	StopRemote() error
+	RedirectStream(newHost string, newPort int) error
 }
 
-type BalancingSessionHandler interface {
-	StartRemote() error
-	StopRemote() error
+type balancingSession struct {
+	// Small wrapper for implementing the PluginSession interface
+	BalancingSession
+	server *BackendServer
 }
 
 func NewBalancingPlugin(handler BalancingHandler) *BalancingPlugin {
@@ -91,18 +91,14 @@ func (plugin *BalancingPlugin) NewSession(desc *amp.StartStream) (PluginSession,
 	if server == nil {
 		return nil, fmt.Errorf("No %s server available to handle your request", plugin.handler.Protocol().Name())
 	}
-	session := &BalancingSession{
-		Server: server,
-		Desc:   desc,
+	session, err := plugin.handler.NewSession(server, desc)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create %s session: %s", plugin.handler.Protocol().Name(), err)
 	}
-	session.handler = plugin.handler.NewBalancingSessionHandler(session)
-	if session.handler == nil {
-		return nil, fmt.Errorf("Failed to create BalancingSessionHandler")
-	}
-	if err := session.handler.StartRemote(); err != nil {
-		return nil, fmt.Errorf("Error delegating %s request: %v", plugin.handler.Protocol().Name(), err)
-	}
-	return session, nil
+	return &balancingSession{
+		BalancingSession: session,
+		server:           server,
+	}, nil
 }
 
 func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) {
@@ -113,14 +109,14 @@ func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) {
 	}
 }
 
-func (session *BalancingSession) Start() {
-	// Nothing to do. StartRemote() starts the sessions and is called in NewSession
+func (session *balancingSession) Start() {
+	// Nothing to do. BalancingSession.NewSession() fully starts the session.
 }
 
-func (session *BalancingSession) Observees() []helpers.Observee {
+func (session *balancingSession) Observees() []helpers.Observee {
 	return nil // No observees
 }
 
-func (session *BalancingSession) Cleanup() error {
-	return session.handler.StopRemote()
+func (session *balancingSession) Cleanup() error {
+	return session.StopRemote()
 }

@@ -1,46 +1,52 @@
 package amp_balancer
 
 import (
+	"fmt"
+
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 )
 
-type ampBalancingPluginHandler struct {
+type ampBalancingHandler struct {
 	amp.AmpProtocol
 }
 
-type ampBalancingSessionHandler struct {
-	*BalancingSession
-	client amp.CircuitBreaker
+type ampBalancingSession struct {
+	client       amp.CircuitBreaker
+	receiverHost string
+	receiverPort int
 }
 
 func NewAmpBalancingPlugin() *BalancingPlugin {
-	return NewBalancingPlugin(new(ampBalancingPluginHandler))
+	return NewBalancingPlugin(new(ampBalancingHandler))
 }
 
-func (handler *ampBalancingPluginHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
+func (handler *ampBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
 	return amp.NewCircuitBreaker(localAddr)
 }
 
-func (handler *ampBalancingPluginHandler) Protocol() protocols.Protocol {
+func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
 	return handler
 }
 
-func (handler *ampBalancingPluginHandler) NewBalancingSessionHandler(session *BalancingSession) BalancingSessionHandler {
-	client, ok := session.Server.Client.(amp.CircuitBreaker)
+func (handler *ampBalancingHandler) NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) {
+	client, ok := server.Client.(amp.CircuitBreaker)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", server.Client)
 	}
-	return &ampBalancingSessionHandler{
-		BalancingSession: session,
-		client:           client,
+	err := client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
+	if err != nil {
+		return nil, err
 	}
+	return &ampBalancingSession{
+		client: client,
+	}, nil
 }
 
-func (handler *ampBalancingSessionHandler) StartRemote() error {
-	return handler.client.StartStream(handler.Desc.ReceiverHost, handler.Desc.Port, handler.Desc.MediaFile)
+func (session *ampBalancingSession) StopRemote() error {
+	return session.client.StopStream(session.receiverHost, session.receiverPort)
 }
 
-func (handler *ampBalancingSessionHandler) StopRemote() error {
-	return handler.client.StopStream(handler.Desc.ReceiverHost, handler.Desc.Port)
+func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) error {
+	return fmt.Errorf("RedirectRemote not implemented for amp balancer plugin")
 }

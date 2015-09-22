@@ -1,55 +1,63 @@
 package amp_balancer
 
 import (
+	"fmt"
+
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/pcp"
 )
 
-type pcpBalancingPluginHandler struct {
+type pcpBalancingHandler struct {
 	pcp.PcpProtocol
 }
 
-type pcpBalancingSessionHandler struct {
-	*BalancingSession
-	client    pcp.CircuitBreaker
-	proxyHost string
-	proxyPort int
+type pcpBalancingSession struct {
+	client       pcp.CircuitBreaker
+	receiverHost string
+	receiverPort int
+	proxyHost    string
+	proxyPort    int
 }
 
 func NewPcpBalancingPlugin() *BalancingPlugin {
-	return NewBalancingPlugin(new(pcpBalancingPluginHandler))
+	return NewBalancingPlugin(new(pcpBalancingHandler))
 }
 
-func (handler *pcpBalancingPluginHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
+func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
 	return pcp.NewCircuitBreaker(localAddr)
 }
 
-func (handler *pcpBalancingPluginHandler) Protocol() protocols.Protocol {
+func (handler *pcpBalancingHandler) Protocol() protocols.Protocol {
 	return handler
 }
 
-func (handler *pcpBalancingPluginHandler) NewBalancingSessionHandler(session *BalancingSession) BalancingSessionHandler {
-	client, ok := session.Server.Client.(pcp.CircuitBreaker)
+func (handler *pcpBalancingHandler) NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) {
+	client, ok := server.Client.(pcp.CircuitBreaker)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", server.Client)
 	}
-	return &pcpBalancingSessionHandler{
-		BalancingSession: session,
-		client:           client,
-	}
-}
-
-func (handler *pcpBalancingSessionHandler) StartRemote() error {
-	// TODO the proxy host should be specified
-	resp, err := handler.client.StartProxyPair(handler.Desc.ReceiverHost, handler.Desc.Port, handler.Desc.Port+1)
+	resp, err := client.StartProxyPair(desc.ReceiverHost, desc.Port, desc.Port+1)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	handler.proxyHost = resp.ProxyHost
-	handler.proxyPort = resp.ProxyPort1
-	return nil
+	session := &pcpBalancingSession{
+		client:       client,
+		receiverHost: desc.ReceiverHost,
+		receiverPort: desc.Port,
+		proxyHost:    resp.ProxyHost,
+		proxyPort:    resp.ProxyPort1,
+	}
+	// Make sure the next plugin sends the data to the proxies instead of the actual client
+	desc.ReceiverHost = resp.ProxyHost
+	desc.Port = resp.ProxyPort1
+	return session, nil
 }
 
-func (handler *pcpBalancingSessionHandler) StopRemote() error {
-	return handler.client.StopProxyPair(handler.proxyPort)
+func (session *pcpBalancingSession) StopRemote() error {
+	return session.client.StopProxyPair(session.proxyPort)
+}
+
+func (session *pcpBalancingSession) RedirectStream(newHost string, newPort int) error {
+	return fmt.Errorf("RedirectRemote not implemented for pcp balancer plugin")
 }

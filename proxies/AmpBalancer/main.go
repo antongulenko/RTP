@@ -12,8 +12,8 @@ const (
 	amp_addr = "127.0.0.1:7779"
 )
 
-func printAmpErrors(balancer *amp_balancer.AmpBalancer) {
-	for err := range balancer.Errors() {
+func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
+	for err := range server.Errors() {
 		log.Println("AMP error: " + err.Error())
 	}
 }
@@ -43,21 +43,21 @@ func main() {
 	err = pcpPlugin.AddBackendServer("127.0.0.1:7778", stateChangePrinter)
 	Checkerr(err)
 
-	balancer, err := amp_balancer.NewAmpBalancer(amp_addr)
+	server, err := amp_balancer.NewExtendedAmpServer(amp_addr)
 	Checkerr(err)
-	balancer.AddPlugin(ampPlugin)
-	balancer.AddPlugin(pcpPlugin)
+	server.AddPlugin(ampPlugin)
+	server.AddPlugin(pcpPlugin)
 
-	go printAmpErrors(balancer)
-	balancer.SessionStartedCallback = printSessionStarted
-	balancer.SessionStoppedCallback = printSessionStopped
+	go printAmpErrors(server)
+	server.SessionStartedCallback = printSessionStarted
+	server.SessionStoppedCallback = printSessionStopped
 
-	balancer.Start()
+	server.Start()
 
 	log.Println("Listening to AMP on " + amp_addr)
 	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
-		balancer,
+		server,
 		&NoopObservee{ExternalInterrupt()},
 	})
 }
