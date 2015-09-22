@@ -49,10 +49,6 @@ type Packet struct {
 	SourceAddr *net.UDPAddr
 }
 
-func (packet *Packet) IsOK() bool {
-	return packet.Code == CodeOK
-}
-
 func (packet *Packet) IsError() bool {
 	return packet.Code == CodeError
 }

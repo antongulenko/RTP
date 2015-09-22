@@ -8,13 +8,15 @@ import (
 
 type Server struct {
 	*protocols.Server
-	*pcpProtocol
+	*PcpProtocol
 	handler Handler
 }
 
 type Handler interface {
 	StartProxy(val *StartProxy) error
 	StopProxy(val *StopProxy) error
+	StartProxyPair(val *StartProxyPair) (*StartProxyPairResponse, error)
+	StopProxyPair(val *StopProxyPair) error
 	StopServer()
 }
 
@@ -49,6 +51,25 @@ func (server *Server) HandleRequest(packet *protocols.Packet) {
 		} else {
 			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxy: %v", packet.Val))
 		}
+	case CodeStartProxyPair:
+		if desc, ok := val.(*StartProxyPair); ok {
+			reply, err := server.handler.StartProxyPair(desc)
+			if err == nil {
+				server.Reply(packet, CodeStartProxyPairResponse, reply)
+			} else {
+				server.ReplyError(packet, err)
+			}
+		} else {
+			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxyPair: %v", packet.Val))
+		}
+	case CodeStopProxyPair:
+		if desc, ok := val.(*StopProxyPair); ok {
+			server.ReplyCheck(packet, server.handler.StopProxyPair(desc))
+		} else {
+			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxyPair: %v", packet.Val))
+		}
+	case CodeStartProxyPairResponse:
+		server.LogError(fmt.Errorf("Received standalone StartProxyPairResponse message"))
 	default:
 		server.LogError(fmt.Errorf("Received unexpected Pcp code: %v", packet.Code))
 	}

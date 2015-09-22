@@ -27,6 +27,17 @@ type balancerSession struct {
 	plugins  []PluginSession
 }
 
+type Plugin interface {
+	NewSession(desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary
+	Stop(containingServer *protocols.Server)
+}
+
+type PluginSession interface {
+	Start()
+	Cleanup() error
+	Observees() []helpers.Observee
+}
+
 func NewAmpBalancer(local_addr string) (balancer *AmpBalancer, err error) {
 	balancer = &AmpBalancer{
 		sessions: make(protocols.Sessions),
@@ -106,8 +117,10 @@ func (session *balancerSession) Start() {
 
 func (session *balancerSession) cleanupPlugins() {
 	for _, plugin := range session.plugins {
-		if err := plugin.Cleanup(); err != nil {
-			session.base.CleanupErr = fmt.Errorf("Error stopping plugin session: %v", err)
+		if plugin != nil {
+			if err := plugin.Cleanup(); err != nil {
+				session.base.CleanupErr = fmt.Errorf("Error stopping plugin session: %v", err)
+			}
 		}
 	}
 }

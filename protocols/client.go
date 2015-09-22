@@ -27,6 +27,8 @@ type Client interface {
 
 	SendPacket(packet *Packet) error
 	SendRequestPacket(packet *Packet) (reply *Packet, err error)
+
+	String() string
 }
 
 type ExtendedClient interface {
@@ -35,6 +37,7 @@ type ExtendedClient interface {
 	Send(code uint, val interface{}) error
 	SendRequest(code uint, val interface{}) (*Packet, error)
 	CheckReply(reply *Packet) error
+	CheckError(reply *Packet, expectedCode uint) error
 	Ping() error
 }
 
@@ -98,6 +101,10 @@ func (client *client) Close() error {
 
 func (client *client) Closed() bool {
 	return client.closed
+}
+
+func (client *client) String() string {
+	return fmt.Sprintf("%s at %s", client.Protocol().Name(), client.Server())
 }
 
 func (client *client) Protocol() Protocol {
@@ -173,18 +180,20 @@ func (client *extendedClient) SendRequest(code uint, val interface{}) (*Packet, 
 	})
 }
 
-func (client *extendedClient) CheckError(reply *Packet) error {
+func (client *extendedClient) CheckError(reply *Packet, expectedCode uint) error {
 	if reply.IsError() {
 		return fmt.Errorf("%v error: %v", client.Protocol().Name(), reply.Error())
+	}
+	if reply.Code != expectedCode {
+		return fmt.Errorf("Unexpected %s reply code %v. Expected %v. Payload: %v",
+			client.Protocol().Name(), reply.Code, expectedCode, reply.Val)
 	}
 	return nil
 }
 
 func (client *extendedClient) CheckReply(reply *Packet) error {
-	if err := client.CheckError(reply); err != nil {
+	if err := client.CheckError(reply, CodeOK); err != nil {
 		return err
-	} else if !reply.IsOK() {
-		return fmt.Errorf("Expected %v OK reply, got code %v instead: %v", client.Protocol().Name(), reply.Code, reply.Val)
 	}
 	return nil
 }
@@ -195,7 +204,7 @@ func (client *extendedClient) Ping() error {
 	if err != nil {
 		return err
 	}
-	if err = client.CheckError(reply); err != nil {
+	if err = client.CheckError(reply, CodePong); err != nil {
 		return err
 	}
 	pong, ok := reply.Val.(*PongValue)

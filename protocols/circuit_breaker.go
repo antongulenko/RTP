@@ -12,6 +12,10 @@ const (
 	checkPeriod         = 200 * time.Millisecond
 )
 
+var (
+	initialErr = fmt.Errorf("Status was not checked yet")
+)
+
 type CircuitBreakerCallback func(breaker CircuitBreaker)
 
 type CircuitBreaker interface {
@@ -37,7 +41,8 @@ type circuitBreaker struct {
 func NewCircuitBreaker(client ExtendedClient) CircuitBreaker {
 	client.SetTimeout(checkRequestTimeout)
 	breaker := &circuitBreaker{
-		client: client,
+		client:  client,
+		lastErr: initialErr,
 	}
 	breaker.ExtendedClient = ExtendClient(breaker)
 	return breaker
@@ -122,6 +127,10 @@ func (breaker *circuitBreaker) SetServer(server_addr string) error {
 
 func (breaker *circuitBreaker) Server() *net.UDPAddr {
 	return breaker.client.Server()
+}
+
+func (breaker *circuitBreaker) String() string {
+	return breaker.client.String()
 }
 
 func (breaker *circuitBreaker) SetTimeout(timeout time.Duration) {

@@ -34,7 +34,7 @@ const (
 	use_balancer = true
 	amp_balancer = "127.0.0.1:7779"
 
-	use_proxy       = true
+	use_proxy       = false
 	pretend_proxies = false
 
 	rtp_ip         = "127.0.0.1"

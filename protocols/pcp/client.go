@@ -1,16 +1,22 @@
 package pcp
 
-import "github.com/antongulenko/RTP/protocols"
+import (
+	"fmt"
+
+	"github.com/antongulenko/RTP/protocols"
+)
 
 type Client struct {
 	protocols.ExtendedClient
-	*pcpProtocol
+	*PcpProtocol
 }
 
 type CircuitBreaker interface {
 	protocols.CircuitBreaker
 	StartProxy(listenAddr string, targetAddr string) error
 	StopProxy(listenAddr string, targetAddr string) error
+	StartProxyPair(	receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
+	StopProxyPair(proxyPort1 int) error
 }
 
 func NewClient(local_ip string) (client *Client, err error) {
@@ -28,7 +34,7 @@ type circuitBreaker struct {
 }
 
 func NewCircuitBreaker(local_ip string) (CircuitBreaker, error) {
-	proto := new(pcpProtocol)
+	proto := new(PcpProtocol)
 	baseClient, err := protocols.NewExtendedClient(local_ip, proto)
 	if err != nil {
 		return nil, err
@@ -38,7 +44,7 @@ func NewCircuitBreaker(local_ip string) (CircuitBreaker, error) {
 		CircuitBreaker: breaker,
 		Client: &Client{
 			ExtendedClient: breaker,
-			pcpProtocol:    proto,
+			PcpProtocol:    proto,
 		},
 	}, nil
 }
@@ -65,6 +71,37 @@ func (client *Client) StopProxy(listenAddr string, targetAddr string) error {
 		},
 	}
 	reply, err := client.SendRequest(CodeStopProxy, val)
+	if err != nil {
+		return err
+	}
+	return client.CheckReply(reply)
+}
+
+func (client *Client) StartProxyPair(receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error) {
+	val := &StartProxyPair{
+		ReceiverHost:  receiverHost,
+		ReceiverPort1: receiverPort1,
+		ReceiverPort2: receiverPort2,
+	}
+	reply, err := client.SendRequest(CodeStartProxyPair, val)
+	if err != nil {
+		return nil, err
+	}
+	if err = client.CheckError(reply, CodeStartProxyPairResponse); err != nil {
+		return nil, err
+	}
+	response, ok := reply.Val.(*StartProxyPairResponse)
+	if !ok {
+		return nil, fmt.Errorf("Illegal StartProxyPairResponse payload: (%T) %s", reply.Val, reply.Val)
+	}
+	return response, nil
+}
+
+func (client *Client) StopProxyPair(proxyPort1 int) error {
+	val := &StopProxyPair{
+		ProxyPort1: proxyPort1,
+	}
+	reply, err := client.SendRequest(CodeStopProxyPair, val)
 	if err != nil {
 		return err
 	}

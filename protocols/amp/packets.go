@@ -35,18 +35,18 @@ func (client *ClientDescription) Client() string {
 	return net.JoinHostPort(client.ReceiverHost, strconv.Itoa(client.Port))
 }
 
-type ampProtocol struct {
+type AmpProtocol struct {
 }
 
-func (*ampProtocol) Name() string {
+func (*AmpProtocol) Name() string {
 	return "AMP"
 }
 
-func (*ampProtocol) DefaultBufferSize() uint {
+func (*AmpProtocol) DefaultBufferSize() uint {
 	return 512
 }
 
-func (*ampProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
+func (*AmpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
 	switch code {
 	case CodeStartStream:
 		var val StartStream

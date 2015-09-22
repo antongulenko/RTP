@@ -20,8 +20,9 @@ type Server struct {
 	errors     chan error
 	handler    ServerHandler
 
-	Wg      *sync.WaitGroup
-	Stopped bool
+	Wg        *sync.WaitGroup
+	Stopped   bool
+	LocalAddr *net.UDPAddr
 }
 
 type ServerHandler interface {
@@ -44,6 +45,7 @@ func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
 	}
 	return &Server{
 		Wg:         new(sync.WaitGroup),
+		LocalAddr:  udpAddr,
 		handler:    handler,
 		listenConn: listenConn,
 		errors:     make(chan error, ErrorChanBuffer),

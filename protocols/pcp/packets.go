@@ -15,6 +15,9 @@ import (
 const (
 	CodeStartProxy = protocols.CodeOther + iota
 	CodeStopProxy
+	CodeStartProxyPair
+	CodeStopProxyPair
+	CodeStartProxyPairResponse
 )
 
 type ProxyDescription struct {
@@ -30,6 +33,22 @@ type StopProxy struct {
 	ProxyDescription
 }
 
+type StartProxyPair struct {
+	ReceiverHost  string
+	ReceiverPort1 int
+	ReceiverPort2 int
+}
+
+type StopProxyPair struct {
+	ProxyPort1 int
+}
+
+type StartProxyPairResponse struct {
+	ProxyHost  string
+	ProxyPort1 int
+	ProxyPort2 int
+}
+
 func (desc *ProxyDescription) ListenPort() (int, error) {
 	_, port, err := net.SplitHostPort(desc.ListenAddr)
 	if err != nil {
@@ -38,18 +57,18 @@ func (desc *ProxyDescription) ListenPort() (int, error) {
 	return strconv.Atoi(port)
 }
 
-type pcpProtocol struct {
+type PcpProtocol struct {
 }
 
-func (*pcpProtocol) Name() string {
+func (*PcpProtocol) Name() string {
 	return "PCP"
 }
 
-func (*pcpProtocol) DefaultBufferSize() uint {
+func (*PcpProtocol) DefaultBufferSize() uint {
 	return 512
 }
 
-func (*pcpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
+func (*PcpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
 	switch code {
 	case CodeStartProxy:
 		var val StartProxy
@@ -63,6 +82,27 @@ func (*pcpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error
 		err := dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding PCP StopProxy value: %v", err)
+		}
+		return &val, nil
+	case CodeStartProxyPair:
+		var val StartProxyPair
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding PCP StartProxyPair value: %v", err)
+		}
+		return &val, nil
+	case CodeStopProxyPair:
+		var val StopProxyPair
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding PCP StopProxyPair value: %v", err)
+		}
+		return &val, nil
+	case CodeStartProxyPairResponse:
+		var val StartProxyPairResponse
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding PCP StartProxyPairResponse value: %v", err)
 		}
 		return &val, nil
 	default:

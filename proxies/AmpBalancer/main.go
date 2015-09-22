@@ -27,22 +27,26 @@ func printSessionStopped(client string) {
 }
 
 func stateChangePrinter(breaker protocols.CircuitBreaker) {
-	err, server := breaker.Error(), breaker.Server()
+	err, server := breaker.Error(), breaker.String()
 	if err != nil {
-		log.Printf("AMP Server %v down: %v\n", server, err)
+		log.Printf("%v down: %v\n", server, err)
 	} else {
-		log.Printf("AMP Server %v up\n", server)
+		log.Printf("%s up\n", server)
 	}
 }
 
 func main() {
-	ampPlugin := amp_balancer.NewAmpPlugin()
-	err := ampPlugin.AddMediaServer("127.0.0.1:7777", stateChangePrinter)
+	ampPlugin := amp_balancer.NewAmpBalancingPlugin()
+	err := ampPlugin.AddBackendServer("127.0.0.1:7777", stateChangePrinter)
+	Checkerr(err)
+	pcpPlugin := amp_balancer.NewPcpBalancingPlugin()
+	err = pcpPlugin.AddBackendServer("127.0.0.1:7778", stateChangePrinter)
 	Checkerr(err)
 
 	balancer, err := amp_balancer.NewAmpBalancer(amp_addr)
 	Checkerr(err)
 	balancer.AddPlugin(ampPlugin)
+	balancer.AddPlugin(pcpPlugin)
 
 	go printAmpErrors(balancer)
 	balancer.SessionStartedCallback = printSessionStarted
