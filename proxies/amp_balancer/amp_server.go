@@ -27,6 +27,7 @@ type ampServerSession struct {
 }
 
 type Plugin interface {
+	Start(server *ExtendedAmpServer)
 	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary. Do not store desc itself.
 	Stop(containingServer *protocols.Server) []error
 }
@@ -51,6 +52,7 @@ func NewExtendedAmpServer(local_addr string) (server *ExtendedAmpServer, err err
 
 func (server *ExtendedAmpServer) AddPlugin(plugin Plugin) {
 	server.plugins = append(server.plugins, plugin)
+	plugin.Start(server)
 }
 
 func (server *ExtendedAmpServer) StopServer() {

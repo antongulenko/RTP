@@ -26,7 +26,12 @@ func printSessionStopped(client string) {
 	log.Println("Stopped session for", client)
 }
 
-func stateChangePrinter(breaker protocols.CircuitBreaker) {
+func stateChangePrinter(key interface{}) {
+	breaker, ok := key.(protocols.CircuitBreaker)
+	if !ok {
+		log.Printf("Failed to convert %v (%T) to CircuitBreaker\n", key, key)
+		return
+	}
 	err, server := breaker.Error(), breaker.String()
 	if err != nil {
 		log.Printf("%v down: %v\n", server, err)

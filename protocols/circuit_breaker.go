@@ -16,7 +16,11 @@ var (
 	initialErr = fmt.Errorf("Status was not checked yet")
 )
 
-type CircuitBreakerCallback func(breaker CircuitBreaker)
+type CircuitBreakerCallback func(key interface{})
+type callbackData struct {
+	callback CircuitBreakerCallback
+	key      interface{}
+}
 
 type CircuitBreaker interface {
 	ExtendedClient
@@ -26,23 +30,24 @@ type CircuitBreaker interface {
 	Error() error
 	Online() bool
 
-	SetStateChangedCallback(callback CircuitBreakerCallback)
+	AddStateChangedCallback(callback CircuitBreakerCallback, key interface{})
 }
 
 type circuitBreaker struct {
 	ExtendedClient // Extended self
 
-	client   ExtendedClient
-	lastErr  error
-	lock     sync.Mutex
-	callback CircuitBreakerCallback
+	client    ExtendedClient // Backend client for the actual operations
+	lastErr   error
+	lock      sync.Mutex
+	callbacks []callbackData
 }
 
 func NewCircuitBreaker(client ExtendedClient) CircuitBreaker {
 	client.SetTimeout(checkRequestTimeout)
 	breaker := &circuitBreaker{
-		client:  client,
-		lastErr: initialErr,
+		client:    client,
+		lastErr:   initialErr,
+		callbacks: make([]callbackData, 0, 3),
 	}
 	breaker.ExtendedClient = ExtendClient(breaker)
 	return breaker
@@ -74,10 +79,10 @@ func (breaker *circuitBreaker) loopCheck() {
 }
 
 func (breaker *circuitBreaker) invokeCallback(wasOnline bool) {
-	if breaker.callback != nil {
-		isOnline := breaker.lastErr == nil
-		if wasOnline != isOnline {
-			breaker.callback(breaker)
+	isOnline := breaker.lastErr == nil
+	if wasOnline != isOnline {
+		for _, callbackData := range breaker.callbacks {
+			callbackData.callback(callbackData.key)
 		}
 	}
 }
@@ -97,8 +102,8 @@ func (breaker *circuitBreaker) lockedOnline(execute func() error) bool {
 	return false
 }
 
-func (breaker *circuitBreaker) SetStateChangedCallback(callback CircuitBreakerCallback) {
-	breaker.callback = callback
+func (breaker *circuitBreaker) AddStateChangedCallback(callback CircuitBreakerCallback, key interface{}) {
+	breaker.callbacks = append(breaker.callbacks, callbackData{callback, key})
 }
 
 func (breaker *circuitBreaker) Check() {

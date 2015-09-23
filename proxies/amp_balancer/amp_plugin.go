@@ -30,9 +30,9 @@ func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
 }
 
 func (handler *ampBalancingHandler) NewSession(containingSession *balancingSession, desc *amp.StartStream) (BalancingSession, error) {
-	client, ok := containingSession.server.Client.(amp.CircuitBreaker)
+	client, ok := containingSession.Server.Client.(amp.CircuitBreaker)
 	if !ok {
-		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", containingSession.server.Client)
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", containingSession.Server.Client)
 	}
 	err := client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
 	if err != nil {
@@ -57,4 +57,8 @@ func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) 
 	session.receiverHost = newHost
 	session.receiverPort = newPort
 	return nil
+}
+
+func (session *ampBalancingSession) HandleServerFault() error {
+	return fmt.Errorf("Fault handling not implemented for AMP servers")
 }
