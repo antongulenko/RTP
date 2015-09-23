@@ -101,12 +101,13 @@ func (plugin *BalancingPlugin) NewSession(desc *amp.StartStream) (PluginSession,
 	}, nil
 }
 
-func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) {
+func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) (errors []error) {
 	for _, server := range plugin.Servers {
 		if err := server.Client.Close(); err != nil {
-			containingServer.LogError(fmt.Errorf("Error closing connection to %s: %v", server.Client, err))
+			errors = append(errors, fmt.Errorf("Error closing connection to %s: %v", server.Client, err))
 		}
 	}
+	return
 }
 
 func (session *balancingSession) Start() {

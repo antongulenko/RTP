@@ -73,7 +73,9 @@ func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (proxy *AmpProxy, err
 }
 
 func (proxy *AmpProxy) StopServer() {
-	proxy.sessions.StopSessions()
+	for _, err := range proxy.sessions.StopSessions() {
+		proxy.LogError(fmt.Errorf("Error closing session: %v", err))
+	}
 }
 
 func (proxy *AmpProxy) StartStream(desc *amp.StartStream) error {
@@ -179,8 +181,7 @@ func (session *streamSession) Start() {
 func (session *streamSession) Cleanup() {
 	for _, p := range session.proxies() {
 		if p.Err != nil {
-			session.proxy.LogError(fmt.Errorf("Proxy %s error: %v", p, p.Err))
-			session.CleanupErr = p.Err
+			session.CleanupErr = fmt.Errorf("Proxy %s error: %v", p, p.Err)
 		}
 	}
 	if !session.backend.Success() {

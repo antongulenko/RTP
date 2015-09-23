@@ -56,33 +56,39 @@ func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase,
 	}
 }
 
-func (sessions Sessions) StopSessions() {
+func (sessions Sessions) StopSessions() (errors []error) {
 	for _, session := range sessions {
-		session.Stop()
+		if err := session.StopAndFormatError(); err != nil {
+			errors = append(errors, err)
+		}
 	}
+	return
 }
 
 func (sessions Sessions) StopSession(key interface{}) error {
 	if session, ok := sessions[key]; !ok {
 		return fmt.Errorf("No session found for %v", key)
 	} else {
-		var err error
-		if session.Stopped.Enabled() {
-			var errStr string
-			if session.CleanupErr == nil {
-				errStr = "(no error)"
-			} else {
-				errStr = session.CleanupErr.Error()
-			}
-			err = fmt.Errorf("Session stopped prematurely: %v", errStr)
-		} else {
-			session.Stop()
-			err = session.CleanupErr
-		}
+		err := session.StopAndFormatError()
 		delete(sessions, key)
 		return err
 	}
 	return nil
+}
+
+func (base *SessionBase) StopAndFormatError() error {
+	if base.Stopped.Enabled() {
+		var errStr string
+		if base.CleanupErr == nil {
+			errStr = "(no error)"
+		} else {
+			errStr = base.CleanupErr.Error()
+		}
+		return fmt.Errorf("Session stopped prematurely: %v", errStr)
+	} else {
+		base.Stop()
+		return base.CleanupErr
+	}
 }
 
 func (base *SessionBase) observe() {

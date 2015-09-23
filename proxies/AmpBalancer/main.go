@@ -14,7 +14,7 @@ const (
 
 func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
 	for err := range server.Errors() {
-		log.Println("AMP error: " + err.Error())
+		log.Println("Server error: " + err.Error())
 	}
 }
 

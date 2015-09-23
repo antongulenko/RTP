@@ -39,7 +39,9 @@ func (handler *ampBalancingHandler) NewSession(server *BackendServer, desc *amp.
 		return nil, err
 	}
 	return &ampBalancingSession{
-		client: client,
+		client:       client,
+		receiverHost: desc.ReceiverHost,
+		receiverPort: desc.Port,
 	}, nil
 }
 

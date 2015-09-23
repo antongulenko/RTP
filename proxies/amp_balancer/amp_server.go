@@ -28,7 +28,7 @@ type ampServerSession struct {
 
 type Plugin interface {
 	NewSession(desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary. Do not store desc itself.
-	Stop(containingServer *protocols.Server)
+	Stop(containingServer *protocols.Server) []error
 }
 
 type PluginSession interface {
@@ -54,9 +54,13 @@ func (server *ExtendedAmpServer) AddPlugin(plugin Plugin) {
 }
 
 func (server *ExtendedAmpServer) StopServer() {
-	server.sessions.StopSessions()
+	for _, err := range server.sessions.StopSessions() {
+		server.LogError(fmt.Errorf("Error closing session: %v", err))
+	}
 	for _, plugin := range server.plugins {
-		plugin.Stop(server.Server.Server)
+		for _, err := range plugin.Stop(server.Server.Server) {
+			server.LogError(fmt.Errorf("Error stopping plugin: %v", err))
+		}
 	}
 }
 
