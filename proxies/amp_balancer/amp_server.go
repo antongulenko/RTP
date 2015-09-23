@@ -27,7 +27,7 @@ type ampServerSession struct {
 }
 
 type Plugin interface {
-	NewSession(desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary. Do not store desc itself.
+	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary. Do not store desc itself.
 	Stop(containingServer *protocols.Server) []error
 }
 
@@ -88,7 +88,7 @@ func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSe
 	// Iterate plugin chain backwards: last plugin is facing the client
 	for i := len(server.plugins) - 1; i >= 0; i-- {
 		plugin := server.plugins[i]
-		pluginSession, err := plugin.NewSession(desc)
+		pluginSession, err := plugin.NewSession(session, desc)
 		if err != nil {
 			session.cleanupPlugins()
 			return nil, err

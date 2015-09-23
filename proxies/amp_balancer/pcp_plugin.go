@@ -13,11 +13,12 @@ type pcpBalancingHandler struct {
 }
 
 type pcpBalancingSession struct {
-	client       pcp.CircuitBreaker
-	receiverHost string
-	receiverPort int
-	proxyHost    string
-	proxyPort    int
+	parentSession *ampServerSession
+	client        pcp.CircuitBreaker
+	receiverHost  string
+	receiverPort  int
+	proxyHost     string
+	proxyPort     int
 }
 
 func NewPcpBalancingPlugin() *BalancingPlugin {
@@ -32,21 +33,22 @@ func (handler *pcpBalancingHandler) Protocol() protocols.Protocol {
 	return handler
 }
 
-func (handler *pcpBalancingHandler) NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) {
-	client, ok := server.Client.(pcp.CircuitBreaker)
+func (handler *pcpBalancingHandler) NewSession(containingSession *balancingSession, desc *amp.StartStream) (BalancingSession, error) {
+	client, ok := containingSession.server.Client.(pcp.CircuitBreaker)
 	if !ok {
-		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", server.Client)
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", containingSession.server.Client)
 	}
 	resp, err := client.StartProxyPair(desc.ReceiverHost, desc.Port, desc.Port+1)
 	if err != nil {
 		return nil, err
 	}
 	session := &pcpBalancingSession{
-		client:       client,
-		receiverHost: desc.ReceiverHost,
-		receiverPort: desc.Port,
-		proxyHost:    resp.ProxyHost,
-		proxyPort:    resp.ProxyPort1,
+		client:        client,
+		parentSession: containingSession.containingSession,
+		receiverHost:  desc.ReceiverHost,
+		receiverPort:  desc.Port,
+		proxyHost:     resp.ProxyHost,
+		proxyPort:     resp.ProxyPort1,
 	}
 	// Make sure the next plugin sends the data to the proxies instead of the actual client
 	desc.ReceiverHost = resp.ProxyHost
@@ -59,5 +61,5 @@ func (session *pcpBalancingSession) StopRemote() error {
 }
 
 func (session *pcpBalancingSession) RedirectStream(newHost string, newPort int) error {
-	return fmt.Errorf("RedirectRemote not implemented for pcp balancer plugin")
+	return fmt.Errorf("RedirectStream not implemented for pcp balancer plugin")
 }

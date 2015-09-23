@@ -11,6 +11,7 @@ type CircuitBreaker interface {
 	protocols.CircuitBreaker
 	StartStream(clientHost string, port int, mediaFile string) error
 	StopStream(clientHost string, port int) error
+	RedirectStream(oldHost string, oldPort int, newHost string, newPort int) error
 }
 
 func NewClient(local_ip string) (client *Client, err error) {

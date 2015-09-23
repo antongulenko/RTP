@@ -29,10 +29,10 @@ func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
 	return handler
 }
 
-func (handler *ampBalancingHandler) NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) {
-	client, ok := server.Client.(amp.CircuitBreaker)
+func (handler *ampBalancingHandler) NewSession(containingSession *balancingSession, desc *amp.StartStream) (BalancingSession, error) {
+	client, ok := containingSession.server.Client.(amp.CircuitBreaker)
 	if !ok {
-		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", server.Client)
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", containingSession.server.Client)
 	}
 	err := client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
 	if err != nil {
@@ -50,5 +50,11 @@ func (session *ampBalancingSession) StopRemote() error {
 }
 
 func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) error {
-	return fmt.Errorf("RedirectRemote not implemented for amp balancer plugin")
+	err := session.client.RedirectStream(session.receiverHost, session.receiverPort, newHost, newPort)
+	if err != nil {
+		return err
+	}
+	session.receiverHost = newHost
+	session.receiverPort = newPort
+	return nil
 }

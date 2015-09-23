@@ -16,7 +16,7 @@ type BalancingPlugin struct {
 
 type BalancingHandler interface {
 	NewClient(localAddr string) (protocols.CircuitBreaker, error)
-	NewSession(server *BackendServer, desc *amp.StartStream) (BalancingSession, error) // Modify desc if necessary, do not store it.
+	NewSession(containingSession *balancingSession, desc *amp.StartStream) (BalancingSession, error) // Modify desc if necessary, do not store it.
 	Protocol() protocols.Protocol
 }
 
@@ -34,7 +34,8 @@ type BalancingSession interface {
 type balancingSession struct {
 	// Small wrapper for implementing the PluginSession interface
 	BalancingSession
-	server *BackendServer
+	server            *BackendServer
+	containingSession *ampServerSession
 }
 
 func NewBalancingPlugin(handler BalancingHandler) *BalancingPlugin {
@@ -85,20 +86,22 @@ func (plugin *BalancingPlugin) pickServer(client string) *BackendServer {
 	return nil
 }
 
-func (plugin *BalancingPlugin) NewSession(desc *amp.StartStream) (PluginSession, error) {
+func (plugin *BalancingPlugin) NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) {
 	clientAddr := desc.Client()
 	server := plugin.pickServer(clientAddr)
 	if server == nil {
 		return nil, fmt.Errorf("No %s server available to handle your request", plugin.handler.Protocol().Name())
 	}
-	session, err := plugin.handler.NewSession(server, desc)
+	wrapper := &balancingSession{
+		server:            server,
+		containingSession: containingSession,
+	}
+	var err error
+	wrapper.BalancingSession, err = plugin.handler.NewSession(wrapper, desc)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create %s session: %s", plugin.handler.Protocol().Name(), err)
 	}
-	return &balancingSession{
-		BalancingSession: session,
-		server:           server,
-	}, nil
+	return wrapper, nil
 }
 
 func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) (errors []error) {
