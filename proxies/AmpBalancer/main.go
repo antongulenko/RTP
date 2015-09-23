@@ -8,8 +8,9 @@ import (
 	"github.com/antongulenko/RTP/proxies/amp_balancer"
 )
 
-const (
-	amp_addr = "127.0.0.1:7779"
+var (
+	amp_servers = []string{"127.0.0.1:7777"}
+	pcp_servers = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
 )
 
 func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
@@ -34,19 +35,24 @@ func stateChangePrinter(key interface{}) {
 	}
 	err, server := breaker.Error(), breaker.String()
 	if err != nil {
-		log.Printf("%v down: %v\n", server, err)
+		log.Printf("%s down: %v\n", server, err)
 	} else {
 		log.Printf("%s up\n", server)
 	}
 }
 
 func main() {
+	amp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7779)
 	ampPlugin := amp_balancer.NewAmpBalancingPlugin()
-	err := ampPlugin.AddBackendServer("127.0.0.1:7777", stateChangePrinter)
-	Checkerr(err)
+	for _, amp := range amp_servers {
+		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
+		Checkerr(err)
+	}
 	pcpPlugin := amp_balancer.NewPcpBalancingPlugin()
-	err = pcpPlugin.AddBackendServer("127.0.0.1:7778", stateChangePrinter)
-	Checkerr(err)
+	for _, pcp := range pcp_servers {
+		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
+		Checkerr(err)
+	}
 
 	server, err := amp_balancer.NewExtendedAmpServer(amp_addr)
 	Checkerr(err)

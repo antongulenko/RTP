@@ -6,11 +6,8 @@ import (
 	"log"
 
 	. "github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/proxies"
-)
-
-const (
-	local_addr = "127.0.0.1:7778"
 )
 
 func printPcpErrors(proxy *proxies.PcpProxy) {
@@ -28,7 +25,8 @@ func proxyStopped(proxy *proxies.UdpProxy) {
 }
 
 func main() {
-	proxy, err := proxies.NewPcpProxy(local_addr)
+	pcp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7778)
+	proxy, err := proxies.NewPcpProxy(pcp_addr)
 	Checkerr(err)
 
 	go printPcpErrors(proxy)
@@ -36,7 +34,7 @@ func main() {
 	proxy.ProxyStoppedCallback = proxyStopped
 	proxy.Start()
 
-	log.Println("Listening to PCP on " + local_addr)
+	log.Println("Listening to PCP on " + pcp_addr)
 	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
 		proxy,

@@ -171,6 +171,20 @@ func (session *streamSession) Observees() []helpers.Observee {
 }
 
 func (session *streamSession) Start() {
+	session.rtpProxy.CloseOnError = false
+	session.rtcpProxy.CloseOnError = false
+	go func() {
+		errors1 := session.rtpProxy.WriteErrors()
+		errors2 := session.rtcpProxy.WriteErrors()
+		for {
+			select {
+			case err := <-errors1:
+				session.proxy.LogError(fmt.Errorf("RTP %v write error: %v", session.rtpProxy, err))
+			case err := <-errors2:
+				session.proxy.LogError(fmt.Errorf("RTCP %v write error: %v", session.rtcpProxy, err))
+			}
+		}
+	}()
 	session.rtpProxy.Start()
 	session.rtcpProxy.Start()
 	if session.proxy.StreamStartedCallback != nil {

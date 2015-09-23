@@ -4,13 +4,13 @@ import (
 	"log"
 
 	. "github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/proxies"
 )
 
 const (
-	rtsp_url = "rtsp://127.0.1.1:8554"
-	amp_addr = "127.0.0.1:7777"
-	local_ip = "127.0.0.1"
+	rtsp_url       = "rtsp://127.0.1.1:8554"
+	local_media_ip = "127.0.0.1"
 )
 
 func printAmpErrors(proxy *proxies.AmpProxy) {
@@ -30,7 +30,8 @@ func printRtspStop(rtsp *Command, px []*proxies.UdpProxy) {
 }
 
 func main() {
-	proxy, err := proxies.NewAmpProxy(amp_addr, rtsp_url, local_ip)
+	amp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7777)
+	proxy, err := proxies.NewAmpProxy(amp_addr, rtsp_url, local_media_ip)
 	Checkerr(err)
 
 	go printAmpErrors(proxy)

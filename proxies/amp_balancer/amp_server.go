@@ -36,7 +36,7 @@ type PluginSession interface {
 	Start()
 	Cleanup() error
 	Observees() []helpers.Observee
-	RedirectStream(newHost string, newPort int) error
+	RedirectStream(newHost string, newPort int) error // TODO this method does not belong here
 }
 
 func NewExtendedAmpServer(local_addr string) (server *ExtendedAmpServer, err error) {

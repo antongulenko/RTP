@@ -29,6 +29,10 @@ func (slice BackendServerSlice) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], tmp
 }
 
+func (slice BackendServerSlice) Sort() {
+	sort.Sort(slice)
+}
+
 func (slice BackendServerSlice) pickServer(client string) (primary *BackendServer, backups BackendServerSlice) {
 	// Lowest loaded server for the primary, next lowest loaded servers for backups
 	sort.Sort(slice)
@@ -171,7 +175,7 @@ func (plugin *BalancingPlugin) serverStateChanged(key interface{}) {
 	if err := server.Client.Error(); err != nil {
 		// Server fault detected!
 		if len(server.Sessions) == 0 {
-			plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no clients are affected (%v)", server.Client, err))
+			plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no clients are affected", server.Client))
 			return
 		}
 		for session := range server.Sessions {

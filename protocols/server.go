@@ -2,9 +2,11 @@ package protocols
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"sync"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -144,4 +146,11 @@ func (server *Server) LogError(err error) {
 	default:
 		log.Printf("Warning: dropped server error: %v\n", err)
 	}
+}
+
+func ParseCommandlineFlags(default_ip string, default_port int) string {
+	port := flag.Int("port", default_port, "The port to start the server")
+	ip := flag.String("host", default_ip, "The ip to listen for traffic")
+	flag.Parse()
+	return net.JoinHostPort(*ip, strconv.Itoa(int(*port)))
 }

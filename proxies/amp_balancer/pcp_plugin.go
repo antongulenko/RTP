@@ -65,7 +65,50 @@ func (session *pcpBalancingSession) RedirectStream(newHost string, newPort int) 
 }
 
 func (session *pcpBalancingSession) HandleServerFault() error {
-	// TODO check the session.parent.BackupServers, pick one, start a ProxyPair there
-	// and redirect the stream using session.parent.RedirectStream
-	return fmt.Errorf("Error handling not implemented for PCP plugin")
+	// 1. Fencing: Stop the original node just to be sure.
+	// TODO more reliable fencing.
+	// TODO log the error?
+	go session.client.StopProxyPair(session.proxyPort)
+
+	// 2. Find and initialize backup server
+	var usedBackup *BackendServer
+	var pcpBackup pcp.CircuitBreaker
+	var resp *pcp.StartProxyPairResponse
+	for _, backup := range session.parent.BackupServers {
+		var ok bool
+		pcpBackup, ok = backup.Client.(pcp.CircuitBreaker)
+		// TODO log errors that prevented a backup server from being used?
+		if ok {
+			var err error
+			resp, err = pcpBackup.StartProxyPair(session.receiverHost, session.receiverPort, session.receiverPort+1)
+			if err == nil {
+				usedBackup = backup
+				break
+			}
+		}
+	}
+	if usedBackup == nil {
+		return fmt.Errorf("No valid backup server to failover %s session!", session.client)
+	}
+
+	// Try to redirect the stream to the new proxy.
+	err := session.parent.containingSession.RedirectStream(session.parent, resp.ProxyHost, resp.ProxyPort1)
+	if err != nil {
+		return err
+	}
+
+	session.proxyHost = resp.ProxyHost
+	session.proxyPort = resp.ProxyPort1
+	session.client = pcpBackup
+
+	// Remove the used backup server from the list of backups
+	// TODO manage this list, add new backups
+	session.parent.Server = usedBackup
+	var newBackups = make([]*BackendServer, 0, len(session.parent.BackupServers)-1)
+	for _, backup := range session.parent.BackupServers {
+		if backup != usedBackup {
+			newBackups = append(newBackups, backup)
+		}
+	}
+	return nil
 }

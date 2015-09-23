@@ -2,6 +2,7 @@ package proxies
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -11,8 +12,9 @@ import (
 )
 
 const (
-	buf_size    = 4096
-	buf_packets = 128
+	buf_read_size    = 4096
+	buf_packets      = 128
+	buf_write_errors = 5
 )
 
 type UdpProxy struct {
@@ -23,10 +25,12 @@ type UdpProxy struct {
 	proxyClosed    *helpers.OneshotCondition
 	packets        chan []byte
 	targetConnLock sync.Mutex
+	writeErrors    chan error
 
-	Closed bool
-	Err    error
-	Stats  *stats.Stats
+	CloseOnError bool
+	Closed       bool
+	Err          error
+	Stats        *stats.Stats
 }
 
 func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
@@ -52,13 +56,15 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 	}
 
 	return &UdpProxy{
-		listenConn:  listenConn,
-		listenAddr:  listenUDP,
-		targetConn:  targetConn,
-		targetAddr:  targetUDP,
-		packets:     make(chan []byte, buf_packets),
-		proxyClosed: helpers.NewOneshotCondition(),
-		Stats:       stats.NewStats("UDP Proxy " + listenAddr),
+		listenConn:   listenConn,
+		listenAddr:   listenUDP,
+		targetConn:   targetConn,
+		targetAddr:   targetUDP,
+		packets:      make(chan []byte, buf_packets),
+		proxyClosed:  helpers.NewOneshotCondition(),
+		writeErrors:  make(chan error, buf_write_errors),
+		Stats:        stats.NewStats("UDP Proxy " + listenAddr),
+		CloseOnError: true,
 	}, nil
 }
 
@@ -97,6 +103,10 @@ func (proxy *UdpProxy) Stop() {
 	proxy.doclose(nil)
 }
 
+func (proxy *UdpProxy) WriteErrors() <-chan error {
+	return proxy.writeErrors
+}
+
 func (proxy *UdpProxy) RedirectOutput(newTargetAddr string) error {
 	var targetUDP *net.UDPAddr
 	var err error
@@ -108,7 +118,7 @@ func (proxy *UdpProxy) RedirectOutput(newTargetAddr string) error {
 		return err
 	}
 
-	proxy.targetConnLock.Lock() // Don't close while write is in progress (?)
+	proxy.targetConnLock.Lock() // Don't close while write is in progress
 	defer proxy.targetConnLock.Unlock()
 	proxy.targetConn.Close() // TODO Error is ignored ;/
 	proxy.targetAddr = targetUDP
@@ -133,7 +143,7 @@ func (proxy *UdpProxy) doclose(err error) {
 func (proxy *UdpProxy) readPackets() {
 	defer close(proxy.packets)
 	for {
-		buf := make([]byte, buf_size)
+		buf := make([]byte, buf_read_size)
 		nbytes, _ /*sourceAddr*/, err := proxy.listenConn.ReadFrom(buf)
 		if err != nil {
 			proxy.doclose(err)
@@ -152,8 +162,15 @@ func (proxy *UdpProxy) forwardPackets() {
 		sentbytes, err := proxy.targetConn.Write(bytes)
 		proxy.targetConnLock.Unlock()
 		if err != nil {
-			proxy.doclose(err)
-			return
+			select {
+			case proxy.writeErrors <- err:
+			default:
+				log.Println("Warning: dropping UDP proxy write error: %v", err)
+			}
+			if proxy.CloseOnError {
+				proxy.doclose(err)
+				return
+			}
 		}
 		proxy.Stats.AddNow(uint(sentbytes))
 	}

@@ -15,7 +15,7 @@ type CircuitBreaker interface {
 	protocols.CircuitBreaker
 	StartProxy(listenAddr string, targetAddr string) error
 	StopProxy(listenAddr string, targetAddr string) error
-	StartProxyPair(	receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
+	StartProxyPair(receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
 	StopProxyPair(proxyPort1 int) error
 }
 
