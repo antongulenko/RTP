@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
@@ -28,5 +29,25 @@ func Checkerr(err error) {
 func Printerr(err error) {
 	if err != nil {
 		log.Println("Error:", err)
+	}
+}
+
+type MultiError []error
+
+func (err MultiError) NilOrError() error {
+	if len(err) == 0 {
+		return nil
+	}
+	return err
+}
+
+func (err MultiError) Error() string {
+	switch len(err) {
+	case 0:
+		return "No error"
+	case 1:
+		return err[0].Error()
+	default:
+		return fmt.Sprintf("Multiple errors: %v", err)
 	}
 }

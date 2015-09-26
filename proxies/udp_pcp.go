@@ -49,8 +49,8 @@ func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
 }
 
 func (proxy *PcpProxy) StopServer() {
-	for _, err := range proxy.sessions.StopSessions() {
-		proxy.LogError(fmt.Errorf("Error closing session: %v", err))
+	if err := proxy.sessions.DeleteSessions(); err != nil {
+		proxy.LogError(fmt.Errorf("Error stopping sessions: %v", err))
 	}
 }
 
@@ -81,7 +81,7 @@ func (proxy *PcpProxy) StopProxy(desc *pcp.StopProxy) error {
 	if err != nil {
 		return err
 	}
-	return proxy.sessions.StopSession(port)
+	return proxy.sessions.DeleteSession(port)
 }
 
 func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyPairResponse, error) {
@@ -115,7 +115,7 @@ func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyP
 }
 
 func (proxy *PcpProxy) StopProxyPair(val *pcp.StopProxyPair) error {
-	return proxy.sessions.StopSession(val.ProxyPort1)
+	return proxy.sessions.DeleteSession(val.ProxyPort1)
 }
 
 func (session *udpSession) Observees() []helpers.Observee {
@@ -138,12 +138,14 @@ func (session *udpSession) Start() {
 }
 
 func (session *udpSession) Cleanup() {
+	var errors helpers.MultiError
 	if session.udp.Err != nil {
-		session.CleanupErr = fmt.Errorf("UDP proxy %v error: %v", session.udp, session.udp.Err)
+		errors = append(errors, fmt.Errorf("UDP proxy %v error: %v", session.udp, session.udp.Err))
 	}
 	if session.udp2 != nil && session.udp2.Err != nil {
-		session.CleanupErr = fmt.Errorf("UDP proxy %v error: %v", session.udp2, session.udp2.Err)
+		errors = append(errors, fmt.Errorf("UDP proxy %v error: %v", session.udp2, session.udp2.Err))
 	}
+	session.CleanupErr = errors.NilOrError()
 	if session.proxy.ProxyStoppedCallback != nil {
 		session.proxy.ProxyStoppedCallback(session.udp)
 		if session.udp2 != nil {

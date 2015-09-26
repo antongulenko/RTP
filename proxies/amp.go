@@ -73,8 +73,8 @@ func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (proxy *AmpProxy, err
 }
 
 func (proxy *AmpProxy) StopServer() {
-	for _, err := range proxy.sessions.StopSessions() {
-		proxy.LogError(fmt.Errorf("Error closing session: %v", err))
+	if err := proxy.sessions.DeleteSessions(); err != nil {
+		proxy.LogError(fmt.Errorf("Error stopping all sessions: %v", err))
 	}
 }
 
@@ -93,15 +93,15 @@ func (proxy *AmpProxy) StartStream(desc *amp.StartStream) error {
 }
 
 func (proxy *AmpProxy) StopStream(desc *amp.StopStream) error {
-	return proxy.sessions.StopSession(desc.Client())
+	return proxy.sessions.DeleteSession(desc.Client())
 }
 
 func (proxy *AmpProxy) emergencyStopSession(client string, err error) error {
 	stopErr := proxy.sessions.StopSession(client)
 	if stopErr == nil {
-		return fmt.Errorf("Error redirecting session: %v. Session for %v was stopped.", err, client)
+		return fmt.Errorf("Error redirecting session for %v: %v", client, err)
 	} else {
-		return fmt.Errorf("Error redirecting session: %v. Error stopping session for %v: %v", err, client, stopErr)
+		return fmt.Errorf("Error redirecting session for %v: %v. Error stopping: %v", client, err, stopErr)
 	}
 }
 
@@ -193,14 +193,16 @@ func (session *streamSession) Start() {
 }
 
 func (session *streamSession) Cleanup() {
+	var errors helpers.MultiError
 	for _, p := range session.proxies() {
 		if p.Err != nil {
-			session.CleanupErr = fmt.Errorf("Proxy %s error: %v", p, p.Err)
+			errors = append(errors, fmt.Errorf("Proxy %s error: %v", p, p.Err))
 		}
 	}
 	if !session.backend.Success() {
-		session.CleanupErr = errors.New(session.backend.StateString())
+		errors = append(errors, fmt.Errorf("%s", session.backend.StateString()))
 	}
+	session.CleanupErr = errors.NilOrError()
 	if session.proxy.StreamStoppedCallback != nil {
 		session.proxy.StreamStoppedCallback(session.backend, session.proxies())
 	}

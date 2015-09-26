@@ -165,7 +165,7 @@ func (proxy *UdpProxy) forwardPackets() {
 			select {
 			case proxy.writeErrors <- err:
 			default:
-				log.Println("Warning: dropping UDP proxy write error: %v", err)
+				log.Printf("Warning: dropping UDP proxy %v write error: %v\n", proxy, err)
 			}
 			if proxy.CloseOnError {
 				proxy.doclose(err)

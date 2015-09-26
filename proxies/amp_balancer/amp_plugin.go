@@ -49,6 +49,13 @@ func (session *ampBalancingSession) StopRemote() error {
 	return session.client.StopStream(session.receiverHost, session.receiverPort)
 }
 
+func (session *ampBalancingSession) BackgroundStopRemote() {
+	client := session.client
+	host := session.receiverHost
+	port := session.receiverPort
+	go client.StopStream(host, port) // Drops error
+}
+
 func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) error {
 	err := session.client.RedirectStream(session.receiverHost, session.receiverPort, newHost, newPort)
 	if err != nil {
@@ -59,6 +66,6 @@ func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) 
 	return nil
 }
 
-func (session *ampBalancingSession) HandleServerFault() error {
-	return fmt.Errorf("Fault handling not implemented for AMP servers")
+func (session *ampBalancingSession) HandleServerFault() (*BackendServer, error) {
+	return nil, fmt.Errorf("Fault handling not implemented for AMP servers")
 }

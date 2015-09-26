@@ -56,16 +56,17 @@ func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase,
 	}
 }
 
-func (sessions Sessions) StopSessions() (errors []error) {
+func (sessions Sessions) DeleteSessions() error {
+	errors := make(helpers.MultiError, 0, len(sessions))
 	for _, session := range sessions {
 		if err := session.StopAndFormatError(); err != nil {
 			errors = append(errors, err)
 		}
 	}
-	return
+	return errors.NilOrError()
 }
 
-func (sessions Sessions) StopSession(key interface{}) error {
+func (sessions Sessions) DeleteSession(key interface{}) error {
 	if session, ok := sessions[key]; !ok {
 		return fmt.Errorf("No session found for %v", key)
 	} else {
@@ -74,6 +75,15 @@ func (sessions Sessions) StopSession(key interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (sessions Sessions) StopSession(key interface{}) error {
+	if session, ok := sessions[key]; !ok {
+		return fmt.Errorf("No session found for %v", key)
+	} else {
+		session.Stop()
+		return session.CleanupErr
+	}
 }
 
 func (base *SessionBase) StopAndFormatError() error {

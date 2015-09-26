@@ -15,40 +15,6 @@ const (
 	backup_session_weight = 0.1
 )
 
-type BackendServerSlice []*BackendServer
-
-// Implement sort.Interface
-func (slice BackendServerSlice) Len() int {
-	return len(slice)
-}
-func (slice BackendServerSlice) Less(i, j int) bool {
-	return slice[i].Load < slice[j].Load
-}
-func (slice BackendServerSlice) Swap(i, j int) {
-	tmp := slice[i]
-	slice[i], slice[j] = slice[j], tmp
-}
-
-func (slice BackendServerSlice) Sort() {
-	sort.Sort(slice)
-}
-
-func (slice BackendServerSlice) pickServer(client string) (primary *BackendServer, backups BackendServerSlice) {
-	// Lowest loaded server for the primary, next lowest loaded servers for backups
-	sort.Sort(slice)
-	backups = make(BackendServerSlice, 0, num_backup_servers)
-	for i := 0; i < len(slice) && len(backups) < num_backup_servers; i++ {
-		if server := slice[i]; server.Client.Online() {
-			if primary == nil {
-				primary = server
-			} else {
-				backups = append(backups, server)
-			}
-		}
-	}
-	return
-}
-
 type BalancingPlugin struct {
 	Server  *ExtendedAmpServer
 	Servers BackendServerSlice
@@ -61,19 +27,11 @@ type BalancingHandler interface {
 	Protocol() protocols.Protocol
 }
 
-type BackendServer struct {
-	Addr           *net.UDPAddr
-	LocalAddr      *net.UDPAddr
-	Client         protocols.CircuitBreaker
-	Sessions       map[*balancingSession]bool
-	BackupSessions uint
-	Load           float64 // 1 per session + backup_session_weight per backup session
-}
-
 type BalancingSession interface {
 	StopRemote() error
+	BackgroundStopRemote()
 	RedirectStream(newHost string, newPort int) error
-	HandleServerFault() error
+	HandleServerFault() (*BackendServer, error)
 }
 
 type balancingSession struct {
@@ -83,6 +41,7 @@ type balancingSession struct {
 	Server            *BackendServer
 	BackupServers     BackendServerSlice
 	containingSession *ampServerSession
+	sendingSession    PluginSession
 }
 
 func NewBalancingPlugin(handler BalancingHandler) *BalancingPlugin {
@@ -118,6 +77,7 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, stateCallback proto
 		LocalAddr: localAddr,
 		Client:    client,
 		Sessions:  make(map[*balancingSession]bool),
+		AmpServer: plugin.Server,
 	}
 	plugin.Servers = append(plugin.Servers, server)
 	sort.Sort(plugin.Servers)
@@ -148,16 +108,11 @@ func (plugin *BalancingPlugin) NewSession(containingSession *ampServerSession, d
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create %s session: %s", plugin.handler.Protocol().Name(), err)
 	}
-	server.Sessions[wrapper] = true
-	server.Load++
-	for _, backup := range backups {
-		backup.BackupSessions++
-		backup.Load += backup_session_weight
-	}
+	server.registerSession(wrapper)
 	return wrapper, nil
 }
 
-func (plugin *BalancingPlugin) Stop(containingServer *protocols.Server) (errors []error) {
+func (plugin *BalancingPlugin) Stop() (errors []error) {
 	for _, server := range plugin.Servers {
 		if err := server.Client.Close(); err != nil {
 			errors = append(errors, fmt.Errorf("Error closing connection to %s: %v", server.Client, err))
@@ -172,24 +127,12 @@ func (plugin *BalancingPlugin) serverStateChanged(key interface{}) {
 		plugin.Server.LogError(fmt.Errorf("Could not handle server fault: Failed to convert %v (%T) to *BackendServer", key, key))
 		return
 	}
-	if err := server.Client.Error(); err != nil {
-		// Server fault detected!
-		if len(server.Sessions) == 0 {
-			plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no clients are affected", server.Client))
-			return
-		}
-		for session := range server.Sessions {
-			go func() {
-				if err := session.HandleServerFault(); err != nil {
-					plugin.Server.LogError(fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, err))
-				}
-			}()
-		}
-	}
+	server.handleStateChanged()
 }
 
-func (session *balancingSession) Start() {
-	// Nothing to do. BalancingSession.NewSession() fully starts the session.
+func (session *balancingSession) Start(sendingSession PluginSession) {
+	session.sendingSession = sendingSession
+	// Nothing else to do. BalancingSession.NewSession() fully starts the session.
 }
 
 func (session *balancingSession) Observees() []helpers.Observee {
@@ -197,11 +140,6 @@ func (session *balancingSession) Observees() []helpers.Observee {
 }
 
 func (session *balancingSession) Cleanup() error {
-	delete(session.Server.Sessions, session)
-	session.Server.Load--
-	for _, backup := range session.BackupServers {
-		backup.BackupSessions--
-		backup.Load -= backup_session_weight
-	}
+	session.Server.unregisterSession(session)
 	return session.StopRemote()
 }

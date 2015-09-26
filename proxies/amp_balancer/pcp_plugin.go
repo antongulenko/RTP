@@ -60,17 +60,26 @@ func (session *pcpBalancingSession) StopRemote() error {
 	return session.client.StopProxyPair(session.proxyPort)
 }
 
+func (session *pcpBalancingSession) BackgroundStopRemote() {
+	client := session.client
+	port := session.proxyPort
+	go client.StopProxyPair(port) // Drops error
+}
+
 func (session *pcpBalancingSession) RedirectStream(newHost string, newPort int) error {
 	return fmt.Errorf("RedirectStream not implemented for pcp balancer plugin")
 }
 
-func (session *pcpBalancingSession) HandleServerFault() error {
-	// 1. Fencing: Stop the original node just to be sure.
-	// TODO more reliable fencing.
-	// TODO log the error?
-	go session.client.StopProxyPair(session.proxyPort)
+func (session *pcpBalancingSession) HandleServerFault() (*BackendServer, error) {
+	// Check preconditions for failover
+	sending := session.parent.sendingSession
+	sending2, ok := sending.(*balancingSession)
+	ampSession, ok2 := sending2.BalancingSession.(*ampBalancingSession)
+	if !ok || !ok2 {
+		return nil, fmt.Errorf("Can only handle PCP fault when sending session is *ampBalancingSession. Instead have %v (%T)", sending, sending)
+	}
 
-	// 2. Find and initialize backup server
+	// Find and initialize backup server
 	var usedBackup *BackendServer
 	var pcpBackup pcp.CircuitBreaker
 	var resp *pcp.StartProxyPairResponse
@@ -88,27 +97,16 @@ func (session *pcpBalancingSession) HandleServerFault() error {
 		}
 	}
 	if usedBackup == nil {
-		return fmt.Errorf("No valid backup server to failover %s session!", session.client)
+		return nil, fmt.Errorf("No valid backup server to failover %s session!", session.client)
 	}
-
-	// Try to redirect the stream to the new proxy.
-	err := session.parent.containingSession.RedirectStream(session.parent, resp.ProxyHost, resp.ProxyPort1)
-	if err != nil {
-		return err
-	}
-
+	session.client = pcpBackup
 	session.proxyHost = resp.ProxyHost
 	session.proxyPort = resp.ProxyPort1
-	session.client = pcpBackup
 
-	// Remove the used backup server from the list of backups
-	// TODO manage this list, add new backups
-	session.parent.Server = usedBackup
-	var newBackups = make([]*BackendServer, 0, len(session.parent.BackupServers)-1)
-	for _, backup := range session.parent.BackupServers {
-		if backup != usedBackup {
-			newBackups = append(newBackups, backup)
-		}
+	// Try to redirect the stream to the new proxy.
+	err := ampSession.RedirectStream(resp.ProxyHost, resp.ProxyPort1)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return usedBackup, nil
 }

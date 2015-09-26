@@ -28,15 +28,14 @@ type ampServerSession struct {
 
 type Plugin interface {
 	Start(server *ExtendedAmpServer)
-	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Will modify desc if necessary. Do not store desc itself.
-	Stop(containingServer *protocols.Server) []error
+	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Modify desc if necessary, do not store it.
+	Stop() []error
 }
 
 type PluginSession interface {
-	Start()
+	Start(sendingSession PluginSession)
 	Cleanup() error
 	Observees() []helpers.Observee
-	RedirectStream(newHost string, newPort int) error // TODO this method does not belong here
 }
 
 func NewExtendedAmpServer(local_addr string) (server *ExtendedAmpServer, err error) {
@@ -56,11 +55,11 @@ func (server *ExtendedAmpServer) AddPlugin(plugin Plugin) {
 }
 
 func (server *ExtendedAmpServer) StopServer() {
-	for _, err := range server.sessions.StopSessions() {
-		server.LogError(fmt.Errorf("Error closing session: %v", err))
+	if err := server.sessions.DeleteSessions(); err != nil {
+		server.LogError(fmt.Errorf("Error stopping sessions: %v", err))
 	}
 	for _, plugin := range server.plugins {
-		for _, err := range plugin.Stop(server.Server.Server) {
+		for _, err := range plugin.Stop() {
 			server.LogError(fmt.Errorf("Error stopping plugin: %v", err))
 		}
 	}
@@ -101,7 +100,11 @@ func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSe
 }
 
 func (server *ExtendedAmpServer) StopStream(desc *amp.StopStream) error {
-	return server.sessions.StopSession(desc.Client())
+	return server.StopSession(desc.Client())
+}
+
+func (server *ExtendedAmpServer) StopSession(client string) error {
+	return server.sessions.DeleteSession(client)
 }
 
 func (server *ExtendedAmpServer) RedirectStream(val *amp.RedirectStream) error {
@@ -117,7 +120,11 @@ func (session *ampServerSession) Observees() (result []helpers.Observee) {
 
 func (session *ampServerSession) Start() {
 	for i := len(session.plugins) - 1; i >= 0; i-- {
-		session.plugins[i].Start()
+		var sendingSession PluginSession
+		if i >= 1 {
+			sendingSession = session.plugins[i-1]
+		}
+		session.plugins[i].Start(sendingSession)
 	}
 	if session.server.SessionStartedCallback != nil {
 		session.server.SessionStartedCallback(session.clientAddr)
@@ -125,13 +132,15 @@ func (session *ampServerSession) Start() {
 }
 
 func (session *ampServerSession) cleanupPlugins() {
+	var errors helpers.MultiError
 	for _, plugin := range session.plugins {
 		if plugin != nil {
 			if err := plugin.Cleanup(); err != nil {
-				session.base.CleanupErr = fmt.Errorf("Error stopping plugin session: %v", err)
+				errors = append(errors, fmt.Errorf("Error stopping plugin session: %v", err))
 			}
 		}
 	}
+	session.base.CleanupErr = errors.NilOrError()
 }
 
 func (session *ampServerSession) Cleanup() {
@@ -139,18 +148,4 @@ func (session *ampServerSession) Cleanup() {
 	if session.server.SessionStoppedCallback != nil {
 		session.server.SessionStoppedCallback(session.clientAddr)
 	}
-}
-
-func (session *ampServerSession) RedirectStream(receivingSession PluginSession, newHost string, newPort int) error {
-	var sendingSession PluginSession
-	for _, session := range session.plugins {
-		if session == receivingSession {
-			break
-		}
-		sendingSession = session
-	}
-	if sendingSession == nil {
-		return fmt.Errorf("Failed to find sending plugin for %T plugin in session for %v", receivingSession, session.clientAddr)
-	}
-	return sendingSession.RedirectStream(newHost, newPort)
 }
