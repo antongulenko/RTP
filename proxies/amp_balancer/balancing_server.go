@@ -2,9 +2,9 @@ package amp_balancer
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sort"
+	"sync"
 
 	"github.com/antongulenko/RTP/protocols"
 )
@@ -14,9 +14,13 @@ type BackendServer struct {
 	LocalAddr      *net.UDPAddr
 	Client         protocols.CircuitBreaker
 	Sessions       map[*balancingSession]bool
-	AmpServer      *ExtendedAmpServer
+	Plugin         *BalancingPlugin
 	BackupSessions uint
 	Load           float64 // 1 per session + backup_session_weight per backup session
+}
+
+func (server *BackendServer) String() string {
+	return fmt.Sprintf("%s BackendServer at %s", server.Client.Protocol().Name(), server.Addr)
 }
 
 type BackendServerSlice []*BackendServer
@@ -67,15 +71,8 @@ func (_slice *BackendServerSlice) removeServer(toRemove *BackendServer) {
 	if !found {
 		return
 	}
-	log.Printf("Before removeServer: ", slice)
 	copy(slice[i:], slice[i+1:])
 	*_slice = slice[:len(slice)-1]
-	log.Printf("After removeServer: ", slice)
-}
-
-type failoverResults struct {
-	newServer *BackendServer
-	session   *balancingSession
 }
 
 func (server *BackendServer) registerSession(session *balancingSession) {
@@ -96,23 +93,33 @@ func (server *BackendServer) unregisterSession(session *balancingSession) {
 	}
 }
 
+type failoverResults struct {
+	newServer *BackendServer
+	session   *balancingSession
+}
+
 func (server *BackendServer) handleStateChanged() {
 	if err := server.Client.Error(); err != nil {
 		// Server fault detected!
 		if len(server.Sessions) == 0 {
-			server.AmpServer.LogError(fmt.Errorf("Backend server %v is down, but no sessions are affected", server.Client))
+			server.Plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no sessions are affected", server.Client))
 			return
 		}
-		// TODO this channel is never closed and the reading routine never finishes. Leak!
-		failoverChan := make(chan failoverResults, 3)
-		for session := range server.Sessions {
-			go server.failoverSession(session, failoverChan)
-		}
-		go server.handleFinishedFailovers(failoverChan)
+		go func() {
+			failoverChan := make(chan failoverResults, len(server.Sessions))
+			var wg sync.WaitGroup
+			wg.Add(len(server.Sessions))
+			for session := range server.Sessions {
+				go server.failoverSession(session, failoverChan, &wg)
+			}
+			go server.handleFinishedFailovers(failoverChan)
+			wg.Wait()
+			close(failoverChan)
+		}()
 	}
 }
 
-func (server *BackendServer) failoverSession(session *balancingSession, failoverChan chan<- failoverResults) {
+func (server *BackendServer) failoverSession(session *balancingSession, failoverChan chan<- failoverResults, wg *sync.WaitGroup) {
 	// Fencing: Stop the original node just to be sure.
 	// TODO more reliable fencing.
 	session.BackgroundStopRemote()
@@ -122,23 +129,26 @@ func (server *BackendServer) failoverSession(session *balancingSession, failover
 	} else {
 		failoverChan <- failoverResults{newServer, session}
 	}
+	wg.Done()
 }
 
 func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failoverResults) {
 	for failover := range failoverChan {
 		newServer, session := failover.newServer, failover.session
-
-		// Remove session from old server
-		server.Load--
-		session.BackupServers.removeServer(server)
-		delete(server.Sessions, session)
-
-		// Add session to new server
 		if newServer != nil {
+			// Remove session from old server
+			server.Load--
+			session.BackupServers.removeServer(server)
+			delete(server.Sessions, session)
+
+			// Add session to new server
 			newServer.BackupSessions--
 			newServer.Load += 1 - backup_session_weight
 			newServer.Sessions[session] = true
 			session.Server = newServer
+		} else {
+			// Failover failed - stop session
+			session.containingSession.server.StopSession(session.Client)
 		}
 	}
 }

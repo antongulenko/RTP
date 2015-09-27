@@ -77,7 +77,7 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, stateCallback proto
 		LocalAddr: localAddr,
 		Client:    client,
 		Sessions:  make(map[*balancingSession]bool),
-		AmpServer: plugin.Server,
+		Plugin:    plugin,
 	}
 	plugin.Servers = append(plugin.Servers, server)
 	sort.Sort(plugin.Servers)

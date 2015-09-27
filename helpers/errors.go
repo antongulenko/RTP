@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -48,6 +49,11 @@ func (err MultiError) Error() string {
 	case 1:
 		return err[0].Error()
 	default:
-		return fmt.Sprintf("Multiple errors: %v", err)
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Multiple errors:\n")
+		for i, e := range err {
+			fmt.Fprintf(&buf, "\t%v. %v\n", i, e)
+		}
+		return buf.String()
 	}
 }

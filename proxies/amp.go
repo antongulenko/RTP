@@ -88,7 +88,7 @@ func (proxy *AmpProxy) StartStream(desc *amp.StartStream) error {
 	if err != nil {
 		return err
 	}
-	session.SessionBase = proxy.sessions.NewSession(client, session)
+	proxy.sessions.StartSession(client, session)
 	return nil
 }
 
@@ -170,7 +170,8 @@ func (session *streamSession) Observees() []helpers.Observee {
 	}
 }
 
-func (session *streamSession) Start() {
+func (session *streamSession) Start(base *protocols.SessionBase) {
+	session.SessionBase = base
 	session.rtpProxy.CloseOnError = false
 	session.rtcpProxy.CloseOnError = false
 	go func() {

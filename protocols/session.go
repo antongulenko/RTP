@@ -17,12 +17,12 @@ type SessionBase struct {
 }
 
 type Session interface {
-	Start()
+	Start(base *SessionBase)
 	Observees() []helpers.Observee
 	Cleanup()
 }
 
-func (sessions Sessions) NewSession(key interface{}, session Session) *SessionBase {
+func (sessions Sessions) StartSession(key interface{}, session Session) {
 	base := &SessionBase{
 		Wg:      new(sync.WaitGroup),
 		Stopped: helpers.NewOneshotCondition(),
@@ -30,8 +30,7 @@ func (sessions Sessions) NewSession(key interface{}, session Session) *SessionBa
 	}
 	sessions[key] = base
 	base.observe()
-	session.Start()
-	return base
+	session.Start(base)
 }
 
 func (sessions Sessions) Get(key interface{}) Session {
@@ -44,6 +43,9 @@ func (sessions Sessions) Get(key interface{}) Session {
 
 func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase, error) {
 	if session, ok := sessions[oldKey]; ok {
+		if newKey == oldKey {
+			return session, nil
+		}
 		if _, ok := sessions[newKey]; ok {
 			return nil, fmt.Errorf("Session already exists for %v", newKey)
 		} else {

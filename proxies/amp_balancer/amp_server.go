@@ -74,7 +74,7 @@ func (server *ExtendedAmpServer) StartStream(desc *amp.StartStream) error {
 	if err != nil {
 		return err
 	}
-	session.base = server.sessions.NewSession(client, session)
+	server.sessions.StartSession(client, session)
 	return nil
 }
 
@@ -91,7 +91,7 @@ func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSe
 		plugin := server.plugins[i]
 		pluginSession, err := plugin.NewSession(session, desc)
 		if err != nil {
-			session.cleanupPlugins()
+			_ = session.cleanupPlugins() // Drop error
 			return nil, err
 		}
 		session.plugins[i] = pluginSession
@@ -100,11 +100,11 @@ func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSe
 }
 
 func (server *ExtendedAmpServer) StopStream(desc *amp.StopStream) error {
-	return server.StopSession(desc.Client())
+	return server.sessions.DeleteSession(desc.Client())
 }
 
 func (server *ExtendedAmpServer) StopSession(client string) error {
-	return server.sessions.DeleteSession(client)
+	return server.sessions.StopSession(client)
 }
 
 func (server *ExtendedAmpServer) RedirectStream(val *amp.RedirectStream) error {
@@ -118,7 +118,8 @@ func (session *ampServerSession) Observees() (result []helpers.Observee) {
 	return
 }
 
-func (session *ampServerSession) Start() {
+func (session *ampServerSession) Start(base *protocols.SessionBase) {
+	session.base = base
 	for i := len(session.plugins) - 1; i >= 0; i-- {
 		var sendingSession PluginSession
 		if i >= 1 {
@@ -131,7 +132,7 @@ func (session *ampServerSession) Start() {
 	}
 }
 
-func (session *ampServerSession) cleanupPlugins() {
+func (session *ampServerSession) cleanupPlugins() error {
 	var errors helpers.MultiError
 	for _, plugin := range session.plugins {
 		if plugin != nil {
@@ -140,11 +141,13 @@ func (session *ampServerSession) cleanupPlugins() {
 			}
 		}
 	}
-	session.base.CleanupErr = errors.NilOrError()
+	return errors.NilOrError()
 }
 
 func (session *ampServerSession) Cleanup() {
-	session.cleanupPlugins()
+	if err := session.cleanupPlugins(); err != nil {
+		session.base.CleanupErr = err
+	}
 	if session.server.SessionStoppedCallback != nil {
 		session.server.SessionStoppedCallback(session.clientAddr)
 	}

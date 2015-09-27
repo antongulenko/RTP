@@ -72,7 +72,7 @@ func (proxy *PcpProxy) StartProxy(desc *pcp.StartProxy) error {
 		port:  port,
 		proxy: proxy,
 	}
-	session.SessionBase = proxy.sessions.NewSession(port, session)
+	proxy.sessions.StartSession(port, session)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (proxy *PcpProxy) StopProxy(desc *pcp.StopProxy) error {
 }
 
 func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyPairResponse, error) {
-	listenHost := proxy.LocalAddr.IP.String() // TODO Should not configurable
+	listenHost := proxy.LocalAddr.IP.String() // TODO Should be configurable
 	target1 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort1))
 	target2 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort2))
 	udp1, udp2, err := NewUdpProxyPair(listenHost, target1, target2, proxy.ProxyPairMinPort, proxy.ProxyPairMaxPort)
@@ -106,7 +106,7 @@ func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyP
 		port:  port,
 		proxy: proxy,
 	}
-	session.SessionBase = proxy.sessions.NewSession(port, session)
+	proxy.sessions.StartSession(port, session)
 	return &pcp.StartProxyPairResponse{
 		ProxyHost:  listenHost,
 		ProxyPort1: port1,
@@ -124,7 +124,8 @@ func (session *udpSession) Observees() []helpers.Observee {
 	}
 }
 
-func (session *udpSession) Start() {
+func (session *udpSession) Start(base *protocols.SessionBase) {
+	session.SessionBase = base
 	session.udp.Start()
 	if session.udp2 != nil {
 		session.udp2.Start()
