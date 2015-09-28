@@ -14,12 +14,17 @@ amp: noint
 		&& echo ./noint AmpProxy \
 		|| echo false
 
-pcp: noint
+pcp:
 	go install github.com/antongulenko/RTP/proxies/UdpPcp \
 		&& echo UdpPcp \
 		|| echo false
 
-balancer: noint
+balancer:
 	go install github.com/antongulenko/RTP/proxies/AmpBalancer \
 		&& echo AmpBalancer \
+		|| echo false
+
+latency:
+	go install github.com/antongulenko/RTP/latency_test \
+		&& echo latency_test \
 		|| echo false
