@@ -124,7 +124,6 @@ func (server *BackendServer) failoverSession(session *balancingSession, failover
 	// TODO more reliable fencing.
 	session.BackgroundStopRemote()
 	if newServer, err := session.HandleServerFault(); err != nil {
-		session.containingSession.server.LogError(fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, err))
 		failoverChan <- failoverResults{nil, session}
 	} else {
 		failoverChan <- failoverResults{newServer, session}
@@ -148,7 +147,9 @@ func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failove
 			session.Server = newServer
 		} else {
 			// Failover failed - stop session
-			session.containingSession.server.StopSession(session.Client)
+			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, err)
+			session.LogServerError(err)
+			_ = session.StopContainingSession() // Drop error
 		}
 	}
 }

@@ -35,7 +35,6 @@ type BalancingSession interface {
 }
 
 type balancingSession struct {
-	// Small wrapper for implementing the PluginSession interface
 	BalancingSession
 	Client            string
 	Server            *BackendServer
@@ -128,6 +127,14 @@ func (plugin *BalancingPlugin) serverStateChanged(key interface{}) {
 		return
 	}
 	server.handleStateChanged()
+}
+
+func (session *balancingSession) StopContainingSession() error {
+	return session.containingSession.server.StopSession(session.Client)
+}
+
+func (session *balancingSession) LogServerError(err error) {
+	session.containingSession.server.LogError(err)
 }
 
 func (session *balancingSession) Start(sendingSession PluginSession) {
