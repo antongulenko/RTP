@@ -1,7 +1,7 @@
 package amp
 
 // "A Media Protocol"
-// Mini-protocol to initiate an RTP/RTCP media stream.
+// Mini-protocol to initiate and control an RTP/RTCP media stream.
 
 import (
 	"encoding/gob"
@@ -16,6 +16,8 @@ const (
 	CodeStartStream = protocols.CodeOther + iota
 	CodeStopStream
 	CodeRedirectStream
+	CodePauseStream
+	CodeResumeStream
 )
 
 type ClientDescription struct {
@@ -35,6 +37,14 @@ type StopStream struct {
 type RedirectStream struct {
 	OldClient ClientDescription
 	NewClient ClientDescription
+}
+
+type PauseStream struct {
+	ClientDescription
+}
+
+type ResumeStream struct {
+	ClientDescription
 }
 
 func (client *ClientDescription) Client() string {
@@ -73,6 +83,20 @@ func (*AmpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error
 		err := dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding AMP RedirectStream value: %v", err)
+		}
+		return &val, nil
+	case CodePauseStream:
+		var val PauseStream
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding AMP PauseStream value: %v", err)
+		}
+		return &val, nil
+	case CodeResumeStream:
+		var val ResumeStream
+		err := dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding AMP ResumeStream value: %v", err)
 		}
 		return &val, nil
 	default:

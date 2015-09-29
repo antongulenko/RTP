@@ -148,7 +148,7 @@ func (server *Server) LogError(err error) {
 	}
 }
 
-func ParseCommandlineFlags(default_ip string, default_port int) string {
+func ParseServerFlags(default_ip string, default_port int) string {
 	port := flag.Int("port", default_port, "The port to start the server")
 	ip := flag.String("host", default_ip, "The ip to listen for traffic")
 	flag.Parse()

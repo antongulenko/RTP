@@ -113,5 +113,5 @@ func (server *Server) MeasureLatencyReceived(packet *MeasureLatency) {
 		log.Println("Sequence jump from", server.Sequence, "to", seq)
 	}
 	server.Sequence = seq + 1
-	log.Printf("Seq. %v, latency: %.3f ms\n", seq, float64(latency.Nanoseconds())/1000.0/1000.0)
+	log.Printf("Seq. %v, latency: %s\n", seq, latency)
 }

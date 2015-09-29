@@ -97,7 +97,7 @@ func (session *pcpBalancingSession) HandleServerFault() (*BackendServer, error) 
 		}
 	}
 	if usedBackup == nil {
-		return nil, fmt.Errorf("No valid backup server to failover %s session!", session.client)
+		return nil, fmt.Errorf("No valid backup server for %s!", session.client)
 	}
 	session.client = pcpBackup
 	session.proxyHost = resp.ProxyHost

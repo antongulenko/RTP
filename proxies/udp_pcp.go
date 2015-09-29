@@ -10,20 +10,12 @@ import (
 	"github.com/antongulenko/RTP/protocols/pcp"
 )
 
-var (
-	DefaultProxyPairMinPort int = 20000
-	DefaultProxyPairMaxPort     = 40000
-)
-
 type PcpProxy struct {
 	*pcp.Server
 	sessions protocols.Sessions
 
 	ProxyStartedCallback func(proxy *UdpProxy)
 	ProxyStoppedCallback func(proxy *UdpProxy)
-
-	ProxyPairMinPort int
-	ProxyPairMaxPort int
 }
 
 type udpSession struct {
@@ -37,9 +29,7 @@ type udpSession struct {
 
 func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
 	proxy = &PcpProxy{
-		sessions:         make(protocols.Sessions),
-		ProxyPairMinPort: DefaultProxyPairMinPort,
-		ProxyPairMaxPort: DefaultProxyPairMaxPort,
+		sessions: make(protocols.Sessions),
 	}
 	proxy.Server, err = pcp.NewServer(pcpAddr, proxy)
 	if err != nil {
@@ -88,7 +78,7 @@ func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyP
 	listenHost := proxy.LocalAddr.IP.String() // TODO Should be configurable
 	target1 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort1))
 	target2 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort2))
-	udp1, udp2, err := NewUdpProxyPair(listenHost, target1, target2, proxy.ProxyPairMinPort, proxy.ProxyPairMaxPort)
+	udp1, udp2, err := NewUdpProxyPair(listenHost, target1, target2)
 	if err != nil {
 		return nil, err
 	}

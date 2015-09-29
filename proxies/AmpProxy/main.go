@@ -15,7 +15,7 @@ const (
 
 func printAmpErrors(proxy *proxies.AmpProxy) {
 	for err := range proxy.Errors() {
-		log.Println("AMP error: " + err.Error())
+		log.Println("Server error: " + err.Error())
 	}
 }
 
@@ -30,7 +30,8 @@ func printRtspStop(rtsp *Command, px []*proxies.UdpProxy) {
 }
 
 func main() {
-	amp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7777)
+	proxies.UdpProxyFlags()
+	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7777)
 	proxy, err := proxies.NewAmpProxy(amp_addr, rtsp_url, local_media_ip)
 	Checkerr(err)
 

@@ -42,7 +42,7 @@ func stateChangePrinter(key interface{}) {
 }
 
 func main() {
-	amp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7779)
+	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7779)
 	ampPlugin := amp_balancer.NewAmpBalancingPlugin()
 	for _, amp := range amp_servers {
 		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)

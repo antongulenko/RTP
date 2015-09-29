@@ -16,8 +16,7 @@ import (
 )
 
 const (
-	minPort = 20000
-	maxPort = 50000
+	proxyOnError = OnErrorRetry
 )
 
 type AmpProxy struct {
@@ -130,13 +129,43 @@ func (proxy *AmpProxy) RedirectStream(desc *amp.RedirectStream) error {
 	return nil
 }
 
+func (proxy *AmpProxy) PauseStream(val *amp.PauseStream) error {
+	sessionBase, ok := proxy.sessions[val.Client()]
+	if !ok {
+		return fmt.Errorf("Session not found exists for client %v", val.Client())
+	}
+	session, ok := sessionBase.Session.(*streamSession)
+	if !ok { // Should never happen
+		return fmt.Errorf("Illegal session type %T: %v", sessionBase, sessionBase)
+	}
+	session.rtpProxy.PauseWrite()
+	session.rtcpProxy.PauseWrite()
+	return nil
+}
+
+func (proxy *AmpProxy) ResumeStream(val *amp.ResumeStream) error {
+	sessionBase, ok := proxy.sessions[val.Client()]
+	if !ok {
+		return fmt.Errorf("Session not found exists for client %v", val.Client())
+	}
+	session, ok := sessionBase.Session.(*streamSession)
+	if !ok { // Should never happen
+		return fmt.Errorf("Illegal session type %T: %v", sessionBase, sessionBase)
+	}
+	session.rtpProxy.ResumeWrite()
+	session.rtcpProxy.ResumeWrite()
+	return nil
+}
+
 func (proxy *AmpProxy) newStreamSession(desc *amp.StartStream) (*streamSession, error) {
 	client := desc.Client()
 	rtcpClient := net.JoinHostPort(desc.ReceiverHost, strconv.Itoa(desc.Port+1))
-	rtpProxy, rtcpProxy, err := NewUdpProxyPair(proxy.proxyHost, client, rtcpClient, minPort, maxPort)
+	rtpProxy, rtcpProxy, err := NewUdpProxyPair(proxy.proxyHost, client, rtcpClient)
 	if err != nil {
 		return nil, err
 	}
+	rtpProxy.OnError = proxyOnError
+	rtcpProxy.OnError = proxyOnError
 	rtpPort := rtpProxy.listenAddr.Port
 
 	mediaURL := proxy.rtspURL.ResolveReference(&url.URL{Path: desc.MediaFile})
@@ -172,8 +201,6 @@ func (session *streamSession) Observees() []helpers.Observee {
 
 func (session *streamSession) Start(base *protocols.SessionBase) {
 	session.SessionBase = base
-	session.rtpProxy.CloseOnError = false
-	session.rtcpProxy.CloseOnError = false
 	go func() {
 		errors1 := session.rtpProxy.WriteErrors()
 		errors2 := session.rtcpProxy.WriteErrors()

@@ -41,6 +41,7 @@ type balancingSession struct {
 	BackupServers     BackendServerSlice
 	containingSession *ampServerSession
 	sendingSession    PluginSession
+	failoverError     error
 }
 
 func NewBalancingPlugin(handler BalancingHandler) *BalancingPlugin {
@@ -111,13 +112,14 @@ func (plugin *BalancingPlugin) NewSession(containingSession *ampServerSession, d
 	return wrapper, nil
 }
 
-func (plugin *BalancingPlugin) Stop() (errors []error) {
+func (plugin *BalancingPlugin) Stop() error {
+	var errors helpers.MultiError
 	for _, server := range plugin.Servers {
 		if err := server.Client.Close(); err != nil {
 			errors = append(errors, fmt.Errorf("Error closing connection to %s: %v", server.Client, err))
 		}
 	}
-	return
+	return errors.NilOrError()
 }
 
 func (plugin *BalancingPlugin) serverStateChanged(key interface{}) {
@@ -148,5 +150,10 @@ func (session *balancingSession) Observees() []helpers.Observee {
 
 func (session *balancingSession) Cleanup() error {
 	session.Server.unregisterSession(session)
-	return session.StopRemote()
+	if session.failoverError == nil {
+		return session.StopRemote()
+	} else {
+		// Failover for the session failed previously. Don't try to close it anymore.
+		return session.failoverError
+	}
 }

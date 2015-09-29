@@ -96,6 +96,7 @@ func (server *BackendServer) unregisterSession(session *balancingSession) {
 type failoverResults struct {
 	newServer *BackendServer
 	session   *balancingSession
+	err       error
 }
 
 func (server *BackendServer) handleStateChanged() {
@@ -124,17 +125,17 @@ func (server *BackendServer) failoverSession(session *balancingSession, failover
 	// TODO more reliable fencing.
 	session.BackgroundStopRemote()
 	if newServer, err := session.HandleServerFault(); err != nil {
-		failoverChan <- failoverResults{nil, session}
+		failoverChan <- failoverResults{nil, session, err}
 	} else {
-		failoverChan <- failoverResults{newServer, session}
+		failoverChan <- failoverResults{newServer, session, nil}
 	}
 	wg.Done()
 }
 
 func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failoverResults) {
 	for failover := range failoverChan {
-		newServer, session := failover.newServer, failover.session
-		if newServer != nil {
+		newServer, session, failoverErr := failover.newServer, failover.session, failover.err
+		if failoverErr == nil {
 			// Remove session from old server
 			server.Load--
 			session.BackupServers.removeServer(server)
@@ -147,8 +148,9 @@ func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failove
 			session.Server = newServer
 		} else {
 			// Failover failed - stop session
-			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, err)
+			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, failoverErr)
 			session.LogServerError(err)
+			session.failoverError = err
 			_ = session.StopContainingSession() // Drop error
 		}
 	}

@@ -1,11 +1,13 @@
 package proxies
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/stats"
@@ -13,19 +15,45 @@ import (
 
 const (
 	buf_read_size    = 4096
-	buf_packets      = 128
 	buf_write_errors = 5
 )
 
+var (
+	BufferedPackets  uint = 128
+	ProxyPairMinPort int  = 20000
+	ProxyPairMaxPort int  = 50000
+)
+
+func UdpProxyFlags() {
+	flag.IntVar(&ProxyPairMinPort, "minport", ProxyPairMinPort, "Lowest port for allocating proxy pairs")
+	flag.IntVar(&ProxyPairMaxPort, "maxport", ProxyPairMaxPort, "Highest port for allocating proxy pairs")
+	flag.UintVar(&BufferedPackets, "udp_buffer", BufferedPackets, "Size of buffer for storing received packets before forwarding")
+}
+
+type UdpProxyErrorBehavior int
+
+const (
+	OnErrorClose = UdpProxyErrorBehavior(iota)
+	OnErrorContinue
+	OnErrorRetry
+	OnErrorPause // PauseWrite immediately on error. After ResumeWrite retry last packet.
+)
+
 type UdpProxy struct {
-	listenConn     *net.UDPConn
-	listenAddr     *net.UDPAddr
-	targetConn     *net.UDPConn
-	targetAddr     *net.UDPAddr
+	listenConn *net.UDPConn
+	listenAddr *net.UDPAddr
+	targetConn *net.UDPConn
+	targetAddr *net.UDPAddr
+
 	proxyClosed    *helpers.OneshotCondition
 	packets        chan []byte
 	targetConnLock sync.Mutex
-	writeErrors    chan error
+
+	writePaused     bool
+	writePausedCond sync.Cond
+	writeErrors     chan error
+
+	OnError UdpProxyErrorBehavior
 
 	CloseOnError bool
 	Closed       bool
@@ -48,7 +76,7 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 		return nil, err
 	}
 	// TODO http://play.golang.org/p/ygGFr9oLpW
-	// for per-UDP-packet addressing in case on proxy handles multiple connections
+	// for per-UDP-packet addressing in case one proxy handles multiple connections
 	targetConn, err := net.DialUDP("udp", nil, targetUDP)
 	if err != nil {
 		listenConn.Close()
@@ -56,19 +84,22 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 	}
 
 	return &UdpProxy{
-		listenConn:   listenConn,
-		listenAddr:   listenUDP,
-		targetConn:   targetConn,
-		targetAddr:   targetUDP,
-		packets:      make(chan []byte, buf_packets),
-		proxyClosed:  helpers.NewOneshotCondition(),
-		writeErrors:  make(chan error, buf_write_errors),
-		Stats:        stats.NewStats("UDP Proxy " + listenAddr),
-		CloseOnError: true,
+		listenConn:      listenConn,
+		listenAddr:      listenUDP,
+		targetConn:      targetConn,
+		targetAddr:      targetUDP,
+		packets:         make(chan []byte, BufferedPackets),
+		proxyClosed:     helpers.NewOneshotCondition(),
+		writeErrors:     make(chan error, buf_write_errors),
+		Stats:           stats.NewStats("UDP Proxy " + listenAddr),
+		OnError:         OnErrorClose,
+		writePausedCond: sync.Cond{L: new(sync.Mutex)},
 	}, nil
 }
 
-func NewUdpProxyPair(listenHost, target1, target2 string, startPort, maxPort int) (proxy1 *UdpProxy, proxy2 *UdpProxy, err error) {
+func NewUdpProxyPair(listenHost, target1, target2 string) (proxy1 *UdpProxy, proxy2 *UdpProxy, err error) {
+	startPort := ProxyPairMinPort
+	maxPort := ProxyPairMaxPort
 	for {
 		addr1 := net.JoinHostPort(listenHost, strconv.Itoa(startPort))
 		proxy1, err = NewUdpProxy(addr1, target1)
@@ -120,7 +151,7 @@ func (proxy *UdpProxy) RedirectOutput(newTargetAddr string) error {
 
 	proxy.targetConnLock.Lock() // Don't close while write is in progress
 	defer proxy.targetConnLock.Unlock()
-	proxy.targetConn.Close() // TODO Error is ignored ;/
+	_ = proxy.targetConn.Close() // TODO Error is dropped
 	proxy.targetAddr = targetUDP
 	proxy.targetConn = targetConn
 	return nil
@@ -158,20 +189,77 @@ func (proxy *UdpProxy) readPackets() {
 
 func (proxy *UdpProxy) forwardPackets() {
 	for bytes := range proxy.packets {
-		proxy.targetConnLock.Lock()
-		sentbytes, err := proxy.targetConn.Write(bytes)
-		proxy.targetConnLock.Unlock()
-		if err != nil {
-			select {
-			case proxy.writeErrors <- err:
-			default:
-				log.Printf("Warning: dropping UDP proxy %v write error: %v\n", proxy, err)
-			}
-			if proxy.CloseOnError {
-				proxy.doclose(err)
-				return
+
+		// State for OnErrorRetry
+		var firstWriteError *time.Time
+		var lastError error
+		var writeErrors int
+
+		for {
+			proxy.waitWhilePaused()
+			proxy.targetConnLock.Lock()
+			sentbytes, err := proxy.targetConn.Write(bytes)
+			proxy.targetConnLock.Unlock()
+			if err != nil {
+				switch proxy.OnError {
+				case OnErrorContinue:
+					proxy.writeError(err)
+					break // Fetch next packet
+				case OnErrorPause:
+					proxy.writeError(fmt.Errorf("Pausing %v because of: %v", proxy, err))
+					proxy.PauseWrite() // Will retry packet after ResumeWrite
+				case OnErrorRetry:
+					if firstWriteError == nil {
+						now := time.Now()
+						firstWriteError = &now
+					}
+					lastError = err
+					writeErrors++
+				case OnErrorClose:
+					fallthrough
+				default:
+					proxy.writeError(err)
+					proxy.doclose(err)
+					return
+				}
+			} else {
+				if proxy.OnError == OnErrorRetry && firstWriteError != nil {
+					// Write is working again
+					delay := time.Now().Sub(*firstWriteError).String()
+					proxy.writeError(fmt.Errorf("Continuing after %v write errors within %s. Last error: %v", writeErrors, delay, lastError))
+				}
+				proxy.Stats.AddNow(uint(sentbytes))
+				break
 			}
 		}
-		proxy.Stats.AddNow(uint(sentbytes))
+	}
+}
+
+func (proxy *UdpProxy) writeError(err error) {
+	select {
+	case proxy.writeErrors <- err:
+	default:
+		log.Printf("Warning: dropping UDP proxy %v write error: %v\n", proxy, err)
+	}
+}
+
+func (proxy *UdpProxy) PauseWrite() {
+	proxy.writePausedCond.L.Lock()
+	defer proxy.writePausedCond.L.Unlock()
+	proxy.writePaused = true
+}
+
+func (proxy *UdpProxy) ResumeWrite() {
+	proxy.writePausedCond.L.Lock()
+	defer proxy.writePausedCond.L.Unlock()
+	proxy.writePaused = false
+	proxy.writePausedCond.Broadcast()
+}
+
+func (proxy *UdpProxy) waitWhilePaused() {
+	proxy.writePausedCond.L.Lock()
+	defer proxy.writePausedCond.L.Unlock()
+	for proxy.writePaused {
+		proxy.writePausedCond.Wait()
 	}
 }

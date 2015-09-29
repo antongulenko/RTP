@@ -29,7 +29,7 @@ type ampServerSession struct {
 type Plugin interface {
 	Start(server *ExtendedAmpServer)
 	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Modify desc if necessary, do not store it.
-	Stop() []error
+	Stop() error
 }
 
 type PluginSession interface {
@@ -59,7 +59,7 @@ func (server *ExtendedAmpServer) StopServer() {
 		server.LogError(fmt.Errorf("Error stopping sessions: %v", err))
 	}
 	for _, plugin := range server.plugins {
-		for _, err := range plugin.Stop() {
+		if err := plugin.Stop(); err != nil {
 			server.LogError(fmt.Errorf("Error stopping plugin: %v", err))
 		}
 	}
@@ -109,6 +109,14 @@ func (server *ExtendedAmpServer) StopSession(client string) error {
 
 func (server *ExtendedAmpServer) RedirectStream(val *amp.RedirectStream) error {
 	return fmt.Errorf("AMP RedirectStream not implemented for this AMP server")
+}
+
+func (server *ExtendedAmpServer) PauseStream(val *amp.PauseStream) error {
+	return fmt.Errorf("AMP PauseStream not implemented for this AMP server")
+}
+
+func (server *ExtendedAmpServer) ResumeStream(val *amp.ResumeStream) error {
+	return fmt.Errorf("AMP ResumeStream not implemented for this AMP server")
 }
 
 func (session *ampServerSession) Observees() (result []helpers.Observee) {

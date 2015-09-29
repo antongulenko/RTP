@@ -18,6 +18,8 @@ var (
 )
 
 const (
+	show_dropped_packets_stats = false // Packets dropped inside the gortp stack. Enable when something seems off.
+
 	print_stats       = true
 	running_average   = true
 	print_ctrl_events = false
@@ -68,8 +70,10 @@ func startClient() (rtp_port int) {
 	statistics = append(statistics, client.ReceiveStats)
 	statistics = append(statistics, client.MissedStats)
 	statistics = append(statistics, client.CtrlStats)
-	statistics = append(statistics, client.RtpSession.DroppedDataPackets)
-	statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
+	if show_dropped_packets_stats {
+		statistics = append(statistics, client.RtpSession.DroppedDataPackets)
+		statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
+	}
 	return
 }
 

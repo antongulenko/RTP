@@ -12,7 +12,7 @@ import (
 
 func printPcpErrors(proxy *proxies.PcpProxy) {
 	for err := range proxy.Errors() {
-		log.Println("PCP error: " + err.Error())
+		log.Println("Server error: " + err.Error())
 	}
 }
 
@@ -25,7 +25,9 @@ func proxyStopped(proxy *proxies.UdpProxy) {
 }
 
 func main() {
-	pcp_addr := protocols.ParseCommandlineFlags("0.0.0.0", 7778)
+	proxies.UdpProxyFlags()
+	pcp_addr := protocols.ParseServerFlags("0.0.0.0", 7778)
+
 	proxy, err := proxies.NewPcpProxy(pcp_addr)
 	Checkerr(err)
 

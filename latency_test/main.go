@@ -16,7 +16,7 @@ const (
 
 func main() {
 	target_addr := flag.String("target", default_target, "The partner to exchange latency measurement packets with")
-	local_addr := protocols.ParseCommandlineFlags("0.0.0.0", 6060)
+	local_addr := protocols.ParseServerFlags("0.0.0.0", 6060)
 	local_host, _, err := net.SplitHostPort(local_addr)
 	Checkerr(err)
 
