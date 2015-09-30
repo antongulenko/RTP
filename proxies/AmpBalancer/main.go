@@ -23,10 +23,10 @@ func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
 func printSessionStarted(session *amp_balancer.AmpServerSession) {
 	log.Printf("Started session for %v (", session.Client)
 	for i, plugin := range session.Plugins {
-		fmt.Printf("%v", plugin)
 		if i != 0 {
 			fmt.Printf(", ")
 		}
+		fmt.Printf("%v", plugin)
 	}
 	fmt.Printf(")\n")
 }
