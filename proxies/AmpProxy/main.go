@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	rtsp_url       = "rtsp://127.0.1.1:8554"
+	rtsp_url       = "rtsp://127.0.1.1:554"
 	local_media_ip = "127.0.0.1"
 )
 
