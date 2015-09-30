@@ -34,14 +34,14 @@ func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
 }
 
 func startProxies(rtp_port int) int {
-	if pretend_proxies {
+	if pretend_proxy {
 		return proxy_port
 	}
 
 	if use_pcp {
-		client, err := pcp.NewClient(protocol_local)
+		client, err := pcp.NewClient(client_ip)
 		Checkerr(err)
-		Checkerr(client.SetServer(pcp_server))
+		Checkerr(client.SetServer(pcp_url))
 		makeProxyPCP(client, proxy_port, rtp_port)
 		makeProxyPCP(client, proxy_port+1, rtp_port+1)
 		observees = append(observees, CleanupObservee(func() {

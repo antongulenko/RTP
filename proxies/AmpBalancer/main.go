@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	amp_servers = []string{"127.0.0.1:7777"}
-	pcp_servers = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
+	amp_servers = []string{"media-1:7777", "media-2:7777", "media-3:7777"}
+	pcp_servers = []string{"proxy-1:7778", "proxy-2:7778", "proxy-3:7778"}
 )
 
 func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
@@ -69,6 +69,6 @@ func main() {
 	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
 		server,
-		&NoopObservee{ExternalInterrupt()},
+		&NoopObservee{ExternalInterrupt(), "external interrupt"},
 	})
 }
