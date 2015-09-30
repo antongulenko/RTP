@@ -40,6 +40,6 @@ func main() {
 	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
 		proxy,
-		&NoopObservee{ExternalInterrupt()},
+		&NoopObservee{ExternalInterrupt(), "external interrupt"},
 	})
 }

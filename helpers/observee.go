@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bufio"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,13 +19,17 @@ type Observee interface {
 }
 
 type NoopObservee struct {
-	Chan <-chan interface{}
+	Chan        <-chan interface{}
+	Description string
 }
 
 func (obs *NoopObservee) Observe(*sync.WaitGroup) <-chan interface{} {
 	return obs.Chan
 }
 func (obs *NoopObservee) Stop() {
+}
+func (obs *NoopObservee) String() string {
+	return fmt.Sprintf("Observee(%v)", obs.Description)
 }
 
 type cleanupObservee struct {
@@ -90,16 +95,19 @@ func WaitForAny(channels []<-chan interface{}) int {
 		return -1
 	}
 	// Use reflect package to wait for any of the given channels
-	cases := make([]reflect.SelectCase, len(channels))
-	for i, ch := range channels {
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+	var cases []reflect.SelectCase
+	for _, ch := range channels {
+		if ch != nil {
+			refCase := reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+			cases = append(cases, refCase)
+		}
 	}
 	choice, _, _ := reflect.Select(cases)
 	return choice
 }
 
 func WaitForAnyObservee(wg *sync.WaitGroup, observees []Observee) int {
-	channels := make([]<-chan interface{}, len(observees))
+	channels := make([]<-chan interface{}, 0, len(observees))
 	for _, observee := range observees {
 		if channel := observee.Observe(wg); channel != nil {
 			channels = append(channels, channel)
