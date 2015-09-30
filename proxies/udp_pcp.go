@@ -75,10 +75,9 @@ func (proxy *PcpProxy) StopProxy(desc *pcp.StopProxy) error {
 }
 
 func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyPairResponse, error) {
-	listenHost := proxy.LocalAddr.IP.String() // TODO Should be configurable
 	target1 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort1))
 	target2 := net.JoinHostPort(val.ReceiverHost, strconv.Itoa(val.ReceiverPort2))
-	udp1, udp2, err := NewUdpProxyPair(listenHost, target1, target2)
+	udp1, udp2, err := NewUdpProxyPair(val.ProxyHost, target1, target2)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +97,7 @@ func (proxy *PcpProxy) StartProxyPair(val *pcp.StartProxyPair) (*pcp.StartProxyP
 	}
 	proxy.sessions.StartSession(port, session)
 	return &pcp.StartProxyPairResponse{
-		ProxyHost:  listenHost,
+		ProxyHost:  val.ProxyHost,
 		ProxyPort1: port1,
 		ProxyPort2: port2,
 	}, nil

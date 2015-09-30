@@ -34,6 +34,7 @@ type StopProxy struct {
 }
 
 type StartProxyPair struct {
+	ProxyHost     string
 	ReceiverHost  string
 	ReceiverPort1 int
 	ReceiverPort2 int
