@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 
@@ -21,14 +22,16 @@ func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
 }
 
 func printSessionStarted(session *amp_balancer.AmpServerSession) {
-	log.Printf("Started session for %v (", session.Client)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Started session for %v (", session.Client)
 	for i, plugin := range session.Plugins {
 		if i != 0 {
-			fmt.Printf(", ")
+			fmt.Fprintf(&buf, ", ")
 		}
-		fmt.Printf("%v", plugin)
+		fmt.Fprintf(&buf, "%v", plugin)
 	}
-	fmt.Printf(")\n")
+	fmt.Fprintf(&buf, ")")
+	log.Println(buf.String())
 }
 
 func printSessionStopped(session *amp_balancer.AmpServerSession) {
