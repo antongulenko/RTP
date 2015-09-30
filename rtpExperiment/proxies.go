@@ -21,10 +21,14 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	return p
 }
 
-func pcpProxyAddrs(listenPort, targetPort int) (listen, target string) {
+func pcpProxyIp() string {
 	proxy_ip, _, err := net.SplitHostPort(pcp_url)
 	Checkerr(err)
-	listen = net.JoinHostPort(proxy_ip, strconv.Itoa(listenPort))
+	return proxy_ip
+}
+
+func pcpProxyAddrs(listenPort, targetPort int) (listen, target string) {
+	listen = net.JoinHostPort(pcpProxyIp(), strconv.Itoa(listenPort))
 	target = net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
 	return
 }
@@ -37,12 +41,14 @@ func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
 	Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
-func startProxies(rtp_port int) int {
+func startProxies(rtp_port int) (string, int) {
+	proxy_ip := rtp_ip
 	if pretend_proxy {
-		return proxy_port
+		return proxy_ip, proxy_port
 	}
 
 	if use_pcp {
+		proxy_ip = pcpProxyIp()
 		client, err := pcp.NewClient(client_ip)
 		Checkerr(err)
 		Checkerr(client.SetServer(pcp_url))
@@ -67,5 +73,5 @@ func startProxies(rtp_port int) int {
 			}
 		}))
 	}
-	return proxy_port
+	return proxy_ip, proxy_port
 }
