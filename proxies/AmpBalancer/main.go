@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	. "github.com/antongulenko/RTP/helpers"
@@ -22,12 +23,12 @@ func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
 func printSessionStarted(session *amp_balancer.AmpServerSession) {
 	log.Printf("Started session for %v (", session.Client)
 	for i, plugin := range session.Plugins {
-		log.Printf("%v", plugin)
+		fmt.Printf("%v", plugin)
 		if i != 0 {
-			log.Printf(", ")
+			fmt.Printf(", ")
 		}
 	}
-	log.Printf(")\n")
+	fmt.Printf(")\n")
 }
 
 func printSessionStopped(session *amp_balancer.AmpServerSession) {
