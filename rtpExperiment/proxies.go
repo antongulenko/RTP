@@ -10,14 +10,10 @@ import (
 	"github.com/antongulenko/RTP/proxies"
 )
 
-func proxyAddrs(listenPort, targetPort int) (listen, target string) {
-	listen = net.JoinHostPort(rtp_ip, strconv.Itoa(listenPort))
-	target = net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
-	return
-}
-
 func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
-	listen, target := proxyAddrs(listenPort, targetPort)
+	// Local proxy: use same IP as for RTP traffic
+	listen := net.JoinHostPort(rtp_ip, strconv.Itoa(listenPort))
+	target := net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
 	p, err := proxies.NewUdpProxy(listen, target)
 	Checkerr(err)
 	p.Start()
@@ -25,12 +21,20 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	return p
 }
 
+func pcpProxyAddrs(listenPort, targetPort int) (listen, target string) {
+	proxy_ip, _, err := net.SplitHostPort(pcp_url)
+	Checkerr(err)
+	listen = net.JoinHostPort(proxy_ip, strconv.Itoa(listenPort))
+	target = net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
+	return
+}
+
 func makeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Checkerr(client.StartProxy(proxyAddrs(listenPort, targetPort)))
+	Checkerr(client.StartProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
 func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Printerr(client.StopProxy(proxyAddrs(listenPort, targetPort)))
+	Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
 func startProxies(rtp_port int) int {
