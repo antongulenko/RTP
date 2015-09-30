@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/rtpClient"
 	"github.com/antongulenko/RTP/stats"
-	"github.com/antongulenko/gortp"
+	rtp "github.com/antongulenko/gortp"
 )
 
 var (
@@ -17,32 +18,32 @@ var (
 	observees  []Observee
 )
 
-const (
+var (
+	close_int   = true
+	close_stdin = false
+
 	show_dropped_packets_stats = false // Packets dropped inside the gortp stack. Enable when something seems off.
+	print_stats                = true
+	running_average            = true
+	print_ctrl_events          = false
 
-	print_stats       = true
-	running_average   = true
-	print_ctrl_events = false
+	client_ip = "127.0.0.1"
 
-	protocol_local = "127.0.0.1"
-
-	use_pcp    = true
-	pcp_server = "127.0.0.1:7778"
-
-	use_amp        = true
-	amp_server     = "127.0.0.1:7777"
+	use_amp        = false
+	amp_url        = "127.0.0.1:7779"
 	amp_media_file = "Sample.264"
 
-	use_balancer = true
-	amp_balancer = "127.0.0.1:7779"
+	use_proxy     = false
+	proxy_port    = 9500
+	pretend_proxy = false
+	use_pcp       = false
+	pcp_url       = "127.0.0.1:7778"
 
-	use_proxy       = false
-	pretend_proxies = false
+	use_rtsp = false
+	rtsp_url = "rtsp://127.0.1.1:8554/Sample.264"
 
 	rtp_ip         = "127.0.0.1"
 	start_rtp_port = 9000
-	proxy_port     = 9500
-	rtsp_url       = "rtsp://127.0.1.1:8554/Sample.264"
 )
 
 func startClient() (rtp_port int) {
@@ -79,11 +80,8 @@ func startClient() (rtp_port int) {
 
 func startStream(rtp_port int) {
 	if use_amp {
-		server := amp_server
-		if use_balancer {
-			server = amp_balancer
-		}
-		client, err := amp.NewClient(protocol_local)
+		server := amp_url
+		client, err := amp.NewClient(client_ip)
 		Checkerr(err)
 		Checkerr(client.SetServer(server))
 		Checkerr(client.StartStream(rtp_ip, rtp_port, amp_media_file))
@@ -91,10 +89,11 @@ func startStream(rtp_port int) {
 			Printerr(client.StopStream(rtp_ip, rtp_port))
 			Printerr(client.Close())
 		}))
-	} else {
-		rtsp, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
+	}
+	if use_rtsp {
+		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
 		Checkerr(err)
-		observees = append(observees, rtsp)
+		observees = append(observees, rtspCommand)
 	}
 }
 
@@ -102,8 +101,41 @@ func stopObservees() {
 	ReverseStopObservees(observees)
 }
 
+func parseFlags() {
+	flag.BoolVar(&close_stdin, "stdin", false, "Exit when stdin is closed")
+	flag.BoolVar(&close_int, "int", true, "Exit when INT signal is received")
+
+	flag.BoolVar(&show_dropped_packets_stats, "dropped_packet_stats", show_dropped_packets_stats, "Show numbers of packets dropped within the gortp stack")
+	flag.BoolVar(&print_stats, "stats", print_stats, "Show various statistics about traffic")
+	flag.BoolVar(&running_average, "average", running_average, "Show statistics averaged over the last 3 seconds")
+	flag.BoolVar(&print_ctrl_events, "rtcp", print_ctrl_events, "Print RTCP events")
+
+	flag.BoolVar(&use_rtsp, "rtsp", use_rtsp, "Initiate an RTSP session from the URL given by -rtsp_url")
+	flag.StringVar(&rtsp_url, "rtsp_url", rtsp_url, "Set the URL used if -rtsp is given")
+
+	flag.BoolVar(&use_amp, "amp", use_amp, "Initiate an AMP session at the server given by -amp_url")
+	flag.StringVar(&amp_url, "amp_url", amp_url, "The AMP server used if -amp is given")
+	flag.StringVar(&amp_media_file, "amp_file", amp_media_file, "The media file used with -amp")
+
+	flag.BoolVar(&use_proxy, "proxy", use_proxy, "Route the RTP traffic through a proxy")
+	flag.IntVar(&proxy_port, "proxy_port", proxy_port, "With -proxy, the port to receive traffic and forward it to -rtp_port")
+	flag.BoolVar(&pretend_proxy, "pretend_proxy", pretend_proxy, "Don't really use proxies, but listen on the port that should receive the forwarded traffic. Implies -proxy.")
+	flag.BoolVar(&use_pcp, "pcp", use_pcp, "Use external PCP server to satisfy -proxy. Implies -proxy")
+	flag.StringVar(&pcp_url, "pcp_url", pcp_url, "The PCP server used for -pcp")
+
+	flag.StringVar(&client_ip, "client", client_ip, "The local IP used for AMP and PCP clients")
+	flag.StringVar(&rtp_ip, "rtp", rtp_ip, "The local IP used to receive RTP/RTCP traffic")
+	flag.IntVar(&start_rtp_port, "rtp_port", start_rtp_port, "The local port to receive RTP traffic")
+
+	flag.Parse()
+	use_proxy = use_proxy || use_pcp
+	use_proxy = use_proxy || pretend_proxy
+}
+
 func main() {
+	parseFlags()
 	ExitHook = stopObservees
+
 	rtp_port := startClient()
 	if use_proxy {
 		rtp_port = startProxies(rtp_port)
@@ -122,9 +154,15 @@ func main() {
 		}))
 	}
 
-	log.Println("Press Ctrl-C to interrupt")
-	observees = append(observees, &NoopObservee{ExternalInterrupt()})
+	if close_stdin {
+		log.Println("Press Ctrl-D to interrupt")
+		observees = append(observees, &NoopObservee{StdinClosed(), "stdin closed"})
+	}
+	if close_int {
+		log.Println("Press Ctrl-C to interrupt")
+		observees = append(observees, &NoopObservee{ExternalInterrupt(), "external interrupt"})
+	}
 	choice := WaitForAnyObservee(nil, observees)
-	log.Println("Stopped because of", choice)
+	log.Printf("Stopped because of %T: %v\n", observees[choice], observees[choice])
 	stopObservees()
 }

@@ -119,6 +119,10 @@ func (command *Command) StateString() string {
 	}
 }
 
+func (command *Command) String() string {
+	return command.StateString()
+}
+
 func (command *Command) Observe(wg *sync.WaitGroup) <-chan interface{} {
 	if err := command.checkStarted(); err != nil {
 		return nil

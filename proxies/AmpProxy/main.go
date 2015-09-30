@@ -44,6 +44,6 @@ func main() {
 	log.Println("Press Ctrl-D to close")
 	WaitAndStopObservees(nil, []Observee{
 		proxy,
-		&NoopObservee{StdinClosed()},
+		&NoopObservee{StdinClosed(), "stdin closed"},
 	})
 }
