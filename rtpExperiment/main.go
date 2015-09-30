@@ -10,7 +10,7 @@ import (
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/rtpClient"
 	"github.com/antongulenko/RTP/stats"
-	rtp "github.com/antongulenko/gortp"
+	"github.com/antongulenko/gortp"
 )
 
 var (
