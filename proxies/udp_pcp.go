@@ -109,9 +109,11 @@ func (proxy *PcpProxy) StopProxyPair(val *pcp.StopProxyPair) error {
 }
 
 func (session *udpSession) Observees() []helpers.Observee {
-	return []helpers.Observee{
-		session.udp, session.udp2,
+	result := []helpers.Observee{session.udp}
+	if session.udp2 != nil {
+		result = append(result, session.udp2)
 	}
+	return result
 }
 
 func (session *udpSession) Start(base *protocols.SessionBase) {

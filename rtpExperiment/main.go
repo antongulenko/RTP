@@ -78,7 +78,7 @@ func startClient() (rtp_port int) {
 	return
 }
 
-func startStream(rtp_port int) {
+func startStream(target_ip string, rtp_port int) {
 	if use_amp {
 		log.Println("Starting stream using AMP at", amp_url)
 		server := amp_url
@@ -139,10 +139,11 @@ func main() {
 	ExitHook = stopObservees
 
 	rtp_port := startClient()
+	stream_ip := rtp_ip
 	if use_proxy {
-		rtp_port = startProxies(rtp_port)
+		stream_ip, rtp_port = startProxies(rtp_port)
 	}
-	startStream(rtp_port)
+	startStream(stream_ip, rtp_port)
 
 	if print_stats {
 		if running_average {

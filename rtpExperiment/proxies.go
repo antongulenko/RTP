@@ -10,14 +10,10 @@ import (
 	"github.com/antongulenko/RTP/proxies"
 )
 
-func proxyAddrs(listenPort, targetPort int) (listen, target string) {
-	listen = net.JoinHostPort(rtp_ip, strconv.Itoa(listenPort))
-	target = net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
-	return
-}
-
 func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
-	listen, target := proxyAddrs(listenPort, targetPort)
+	// Local proxy: use same IP as for RTP traffic
+	listen := net.JoinHostPort(rtp_ip, strconv.Itoa(listenPort))
+	target := net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
 	p, err := proxies.NewUdpProxy(listen, target)
 	Checkerr(err)
 	p.Start()
@@ -25,23 +21,38 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	return p
 }
 
+func pcpProxyIp() string {
+	proxy_ip, _, err := net.SplitHostPort(pcp_url)
+	Checkerr(err)
+	return proxy_ip
+}
+
+func pcpProxyAddrs(listenPort, targetPort int) (listen, target string) {
+	listen = net.JoinHostPort(pcpProxyIp(), strconv.Itoa(listenPort))
+	target = net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
+	return
+}
+
 func makeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Checkerr(client.StartProxy(proxyAddrs(listenPort, targetPort)))
+	Checkerr(client.StartProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
 func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Printerr(client.StopProxy(proxyAddrs(listenPort, targetPort)))
+	Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
-func startProxies(rtp_port int) int {
+func startProxies(rtp_port int) (string, int) {
+	proxy_ip := rtp_ip
 	if pretend_proxy {
-		return proxy_port
+		return proxy_ip, proxy_port
 	}
 
 	if use_pcp {
+		proxy_ip = pcpProxyIp()
 		client, err := pcp.NewClient(client_ip)
 		Checkerr(err)
 		Checkerr(client.SetServer(pcp_url))
+		log.Printf("Starting external proxies using %v\n", client)
 		makeProxyPCP(client, proxy_port, rtp_port)
 		makeProxyPCP(client, proxy_port+1, rtp_port+1)
 		observees = append(observees, CleanupObservee(func() {
@@ -62,5 +73,5 @@ func startProxies(rtp_port int) int {
 			}
 		}))
 	}
-	return proxy_port
+	return proxy_ip, proxy_port
 }
