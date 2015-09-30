@@ -46,6 +46,7 @@ func startProxies(rtp_port int) int {
 		client, err := pcp.NewClient(client_ip)
 		Checkerr(err)
 		Checkerr(client.SetServer(pcp_url))
+		log.Printf("Starting external proxies using %v\n", client)
 		makeProxyPCP(client, proxy_port, rtp_port)
 		makeProxyPCP(client, proxy_port+1, rtp_port+1)
 		observees = append(observees, CleanupObservee(func() {
