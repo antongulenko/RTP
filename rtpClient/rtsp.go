@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	rtsp_exe    = "/home/anton/software/live555/testProgs/openRTSP"
+	rtsp_exe    = "/home/ubuntu/media/live555/testProgs/openRTSP"
 	logfile_dir = "openRTSP-logs"
 )
 
