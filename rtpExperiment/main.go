@@ -80,6 +80,7 @@ func startClient() (rtp_port int) {
 
 func startStream(rtp_port int) {
 	if use_amp {
+		log.Println("Starting stream using AMP at", amp_url)
 		server := amp_url
 		client, err := amp.NewClient(client_ip)
 		Checkerr(err)
@@ -91,6 +92,7 @@ func startStream(rtp_port int) {
 		}))
 	}
 	if use_rtsp {
+		log.Println("Starting stream using RTSP at", rtsp_url)
 		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
 		Checkerr(err)
 		observees = append(observees, rtspCommand)
