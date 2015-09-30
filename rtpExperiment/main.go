@@ -85,13 +85,16 @@ func startStream(target_ip string, rtp_port int) {
 		client, err := amp.NewClient(client_ip)
 		Checkerr(err)
 		Checkerr(client.SetServer(server))
-		Checkerr(client.StartStream(rtp_ip, rtp_port, amp_media_file))
+		Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
 		observees = append(observees, CleanupObservee(func() {
-			Printerr(client.StopStream(rtp_ip, rtp_port))
+			Printerr(client.StopStream(target_ip, rtp_port))
 			Printerr(client.Close())
 		}))
 	}
 	if use_rtsp {
+		if target_ip != rtp_ip {
+			log.Println("Warning: RTSP server will stream media to %v, but we are listening on %v\n", rtp_ip, target_ip)
+		}
 		log.Println("Starting stream using RTSP at", rtsp_url)
 		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
 		Checkerr(err)
