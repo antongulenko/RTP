@@ -14,21 +14,21 @@ type ExtendedAmpServer struct {
 
 	plugins []Plugin
 
-	SessionStartedCallback func(client string)
-	SessionStoppedCallback func(client string)
+	SessionStartedCallback func(session *AmpServerSession)
+	SessionStoppedCallback func(session *AmpServerSession)
 }
 
-type ampServerSession struct {
-	base       *protocols.SessionBase
-	clientAddr string
+type AmpServerSession struct {
+	base   *protocols.SessionBase
+	Client string
 
 	server  *ExtendedAmpServer
-	plugins []PluginSession
+	Plugins []PluginSession
 }
 
 type Plugin interface {
 	Start(server *ExtendedAmpServer)
-	NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) // Modify desc if necessary, do not store it.
+	NewSession(containingSession *AmpServerSession, desc *amp.StartStream) (PluginSession, error) // Modify desc if necessary, do not store it.
 	Stop() error
 }
 
@@ -36,6 +36,7 @@ type PluginSession interface {
 	Start(sendingSession PluginSession)
 	Cleanup() error
 	Observees() []helpers.Observee
+	String() string
 }
 
 func NewExtendedAmpServer(local_addr string) (server *ExtendedAmpServer, err error) {
@@ -78,12 +79,12 @@ func (server *ExtendedAmpServer) StartStream(desc *amp.StartStream) error {
 	return nil
 }
 
-func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSession, error) {
+func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*AmpServerSession, error) {
 	clientAddr := desc.Client()
-	session := &ampServerSession{
-		clientAddr: clientAddr,
-		server:     server,
-		plugins:    make([]PluginSession, len(server.plugins)),
+	session := &AmpServerSession{
+		Client:  clientAddr,
+		server:  server,
+		Plugins: make([]PluginSession, len(server.plugins)),
 	}
 
 	// Iterate plugin chain backwards: last plugin is facing the client
@@ -94,7 +95,7 @@ func (server *ExtendedAmpServer) newSession(desc *amp.StartStream) (*ampServerSe
 			_ = session.cleanupPlugins() // Drop error
 			return nil, err
 		}
-		session.plugins[i] = pluginSession
+		session.Plugins[i] = pluginSession
 	}
 	return session, nil
 }
@@ -119,30 +120,30 @@ func (server *ExtendedAmpServer) ResumeStream(val *amp.ResumeStream) error {
 	return fmt.Errorf("AMP ResumeStream not implemented for this AMP server")
 }
 
-func (session *ampServerSession) Observees() (result []helpers.Observee) {
-	for _, plugin := range session.plugins {
+func (session *AmpServerSession) Observees() (result []helpers.Observee) {
+	for _, plugin := range session.Plugins {
 		result = append(result, plugin.Observees()...)
 	}
 	return
 }
 
-func (session *ampServerSession) Start(base *protocols.SessionBase) {
+func (session *AmpServerSession) Start(base *protocols.SessionBase) {
 	session.base = base
-	for i := len(session.plugins) - 1; i >= 0; i-- {
+	for i := len(session.Plugins) - 1; i >= 0; i-- {
 		var sendingSession PluginSession
 		if i >= 1 {
-			sendingSession = session.plugins[i-1]
+			sendingSession = session.Plugins[i-1]
 		}
-		session.plugins[i].Start(sendingSession)
+		session.Plugins[i].Start(sendingSession)
 	}
 	if session.server.SessionStartedCallback != nil {
-		session.server.SessionStartedCallback(session.clientAddr)
+		session.server.SessionStartedCallback(session)
 	}
 }
 
-func (session *ampServerSession) cleanupPlugins() error {
+func (session *AmpServerSession) cleanupPlugins() error {
 	var errors helpers.MultiError
-	for _, plugin := range session.plugins {
+	for _, plugin := range session.Plugins {
 		if plugin != nil {
 			if err := plugin.Cleanup(); err != nil {
 				errors = append(errors, fmt.Errorf("Error stopping plugin session: %v", err))
@@ -152,11 +153,11 @@ func (session *ampServerSession) cleanupPlugins() error {
 	return errors.NilOrError()
 }
 
-func (session *ampServerSession) Cleanup() {
+func (session *AmpServerSession) Cleanup() {
 	if err := session.cleanupPlugins(); err != nil {
 		session.base.CleanupErr = err
 	}
 	if session.server.SessionStoppedCallback != nil {
-		session.server.SessionStoppedCallback(session.clientAddr)
+		session.server.SessionStoppedCallback(session)
 	}
 }

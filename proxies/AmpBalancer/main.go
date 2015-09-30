@@ -19,12 +19,19 @@ func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
 	}
 }
 
-func printSessionStarted(client string) {
-	log.Println("Started session for", client)
+func printSessionStarted(session *amp_balancer.AmpServerSession) {
+	log.Printf("Started session for %v (", session.Client)
+	for i, plugin := range session.Plugins {
+		log.Printf("%v", plugin)
+		if i != 0 {
+			log.Printf(", ")
+		}
+	}
+	log.Printf(")\n")
 }
 
-func printSessionStopped(client string) {
-	log.Println("Stopped session for", client)
+func printSessionStopped(session *amp_balancer.AmpServerSession) {
+	log.Printf("Stopped session for %v\n", session.Client)
 }
 
 func stateChangePrinter(key interface{}) {

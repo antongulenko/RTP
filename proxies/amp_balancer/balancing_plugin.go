@@ -39,7 +39,7 @@ type balancingSession struct {
 	Client            string
 	Server            *BackendServer
 	BackupServers     BackendServerSlice
-	containingSession *ampServerSession
+	containingSession *AmpServerSession
 	sendingSession    PluginSession
 	failoverError     error
 }
@@ -91,7 +91,7 @@ func (plugin *BalancingPlugin) Start(server *ExtendedAmpServer) {
 	plugin.Server = server
 }
 
-func (plugin *BalancingPlugin) NewSession(containingSession *ampServerSession, desc *amp.StartStream) (PluginSession, error) {
+func (plugin *BalancingPlugin) NewSession(containingSession *AmpServerSession, desc *amp.StartStream) (PluginSession, error) {
 	clientAddr := desc.Client()
 	server, backups := plugin.Servers.pickServer(clientAddr)
 	if server == nil {
@@ -156,4 +156,8 @@ func (session *balancingSession) Cleanup() error {
 		// Failover for the session failed previously. Don't try to close it anymore.
 		return session.failoverError
 	}
+}
+
+func (session *balancingSession) String() string {
+	return session.Server.String()
 }
