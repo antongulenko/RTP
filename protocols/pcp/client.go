@@ -15,7 +15,7 @@ type CircuitBreaker interface {
 	protocols.CircuitBreaker
 	StartProxy(listenAddr string, targetAddr string) error
 	StopProxy(listenAddr string, targetAddr string) error
-	StartProxyPair(receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
+	StartProxyPair(proxyHost, receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
 	StopProxyPair(proxyPort1 int) error
 }
 
@@ -77,8 +77,9 @@ func (client *Client) StopProxy(listenAddr string, targetAddr string) error {
 	return client.CheckReply(reply)
 }
 
-func (client *Client) StartProxyPair(receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error) {
+func (client *Client) StartProxyPair(proxyHost, receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error) {
 	val := &StartProxyPair{
+		ProxyHost:     proxyHost,
 		ReceiverHost:  receiverHost,
 		ReceiverPort1: receiverPort1,
 		ReceiverPort2: receiverPort2,
