@@ -15,13 +15,13 @@ var (
 	pcp_servers = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
 )
 
-func printAmpErrors(server *amp_balancer.ExtendedAmpServer) {
+func printAmpErrors(server *protocols.PluginServer) {
 	for err := range server.Errors() {
 		log.Println("Server error: " + err.Error())
 	}
 }
 
-func printSessionStarted(session *amp_balancer.AmpServerSession) {
+func printSessionStarted(session *protocols.PluginSession) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Started session for %v (", session.Client)
 	for i, plugin := range session.Plugins {
@@ -34,7 +34,7 @@ func printSessionStarted(session *amp_balancer.AmpServerSession) {
 	log.Println(buf.String())
 }
 
-func printSessionStopped(session *amp_balancer.AmpServerSession) {
+func printSessionStopped(session *protocols.PluginSession) {
 	log.Printf("Stopped session for %v\n", session.Client)
 }
 
@@ -65,7 +65,7 @@ func main() {
 		Checkerr(err)
 	}
 
-	server, err := amp_balancer.NewExtendedAmpServer(amp_addr)
+	server, err := amp_balancer.NewAmpPluginServer(amp_addr)
 	Checkerr(err)
 	server.AddPlugin(ampPlugin)
 	server.AddPlugin(pcpPlugin)

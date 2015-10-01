@@ -5,6 +5,7 @@ import (
 
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
+	"github.com/antongulenko/RTP/protocols/balancer"
 )
 
 type ampBalancingHandler struct {
@@ -17,8 +18,8 @@ type ampBalancingSession struct {
 	receiverPort int
 }
 
-func NewAmpBalancingPlugin() *BalancingPlugin {
-	return NewBalancingPlugin(new(ampBalancingHandler))
+func NewAmpBalancingPlugin() *balancer.BalancingPlugin {
+	return balancer.NewBalancingPlugin(new(ampBalancingHandler))
 }
 
 func (handler *ampBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
@@ -29,11 +30,16 @@ func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
 	return handler
 }
 
-func (handler *ampBalancingHandler) NewSession(containingSession *balancingSession, desc *amp.StartStream) (BalancingSession, error) {
-	client, ok := containingSession.Server.Client.(amp.CircuitBreaker)
+func (handler *ampBalancingHandler) NewSession(balancerSession *balancer.BalancingSession, param protocols.SessionParameter) (balancer.BalancingSessionHandler, error) {
+	client, ok := balancerSession.PrimaryServer.Client.(amp.CircuitBreaker)
 	if !ok {
-		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", containingSession.Server.Client)
+		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", balancerSession.PrimaryServer.Client)
 	}
+	desc, ok := param.(*amp.StartStream)
+	if !ok {
+		return nil, fmt.Errorf("Illegal session parameter type for ampBalancingHandler: %T", param)
+	}
+
 	err := client.StartStream(desc.ReceiverHost, desc.Port, desc.MediaFile)
 	if err != nil {
 		return nil, err
@@ -66,6 +72,6 @@ func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) 
 	return nil
 }
 
-func (session *ampBalancingSession) HandleServerFault() (*BackendServer, error) {
+func (session *ampBalancingSession) HandleServerFault() (*balancer.BackendServer, error) {
 	return nil, fmt.Errorf("Fault handling not implemented for AMP servers")
 }
