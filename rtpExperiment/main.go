@@ -93,7 +93,7 @@ func startStream(target_ip string, rtp_port int) {
 	}
 	if use_rtsp {
 		if target_ip != rtp_ip {
-			log.Printf("Warning: RTSP server will stream media to %v, but we are listening on %v\n", rtp_ip, target_ip)
+			log.Printf("Warning: RTSP server will stream media to %v, but we are expecting it on %v\n", rtp_ip, target_ip)
 		}
 		log.Println("Starting stream using RTSP at", rtsp_url)
 		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
