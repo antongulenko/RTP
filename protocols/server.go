@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/antongulenko/RTP/helpers"
 )
@@ -21,6 +22,12 @@ type Server struct {
 	listenConn *net.UDPConn
 	errors     chan error
 	handler    ServerHandler
+
+	heartbeatRunning  *helpers.OneshotCondition
+	heartbeatReceiver Client
+	heartbeatTimeout  time.Duration
+	heartbeatSeq      uint64
+	HeartbeatHandler  func(*HeartbeatPacket)
 
 	Wg        *sync.WaitGroup
 	Stopped   bool
@@ -53,6 +60,10 @@ func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
 		errors:     make(chan error, ErrorChanBuffer),
 		stopped:    helpers.NewOneshotCondition(),
 	}, nil
+}
+
+func (server *Server) String() string {
+	return fmt.Sprintf("%v on %v", server.handler.Name(), server.LocalAddr)
 }
 
 func (server *Server) Errors() <-chan error {
@@ -105,11 +116,28 @@ func (server *Server) handle(request *Packet) {
 	case CodePong:
 		server.LogError(fmt.Errorf("Received standalone Pong message"))
 	case CodePing:
-		if ping, ok := val.(*PingValue); ok {
+		if ping, ok := val.(*PingPacket); ok {
 			server.Reply(request, CodePong, ping.PongValue())
 		} else {
 			err := fmt.Errorf("%s Ping received with wrong payload: (%T) %v", server.handler.Name(), val, val)
 			server.ReplyError(request, err)
+		}
+	case CodeConfigureHeartbeat:
+		if conf, ok := val.(*ConfigureHeartbeatPacket); ok {
+			server.ReplyCheck(request, server.ConfigureHeartbeat(conf.TargetServer, conf.Timeout))
+		} else {
+			err := fmt.Errorf("%s ConfigureHeartbeat received with wrong payload: (%T) %v", server.handler.Name(), val, val)
+			server.ReplyError(request, err)
+		}
+	case CodeHeartbeat:
+		if beat, ok := val.(*HeartbeatPacket); ok {
+			if server.HeartbeatHandler == nil {
+				server.HeartbeatHandler(beat)
+			} else {
+				server.LogError(fmt.Errorf("Received unexpected Heartbeat from %v", request.SourceAddr))
+			}
+		} else {
+			server.LogError(fmt.Errorf("%s Heartbeat received with wrong payload: (%T) %v", server.handler.Name(), val, val))
 		}
 	default:
 		server.handler.HandleRequest(request)
@@ -148,9 +176,62 @@ func (server *Server) LogError(err error) {
 	}
 }
 
+func (server *Server) ConfigureHeartbeat(receiver string, timeout time.Duration) error {
+	var client Client
+	var err error
+	if receiver != "" {
+		client, err = NewClientFor(receiver, new(EmptyProtocol))
+		if err != nil {
+			return err
+		}
+	}
+	// TODO potential race condition. This should only be called once.
+	oldReceiver := server.heartbeatReceiver
+	server.heartbeatTimeout = timeout
+	server.heartbeatReceiver = client
+	server.heartbeatSeq = 0
+	if oldReceiver != nil {
+		if err := oldReceiver.Close(); err != nil {
+			server.LogError(fmt.Errorf("Failed to close previous heartbeat receiver: %v", err))
+		}
+	}
+	if client != nil {
+		server.heartbeatRunning.Enable(server.sendHeartbeats)
+	}
+	return nil
+}
+
+func (server *Server) sendHeartbeats() {
+	server.Wg.Add(1)
+	go func() {
+		defer server.Wg.Done()
+		for {
+			client := server.heartbeatReceiver
+			timeout := server.heartbeatTimeout
+			if client != nil && timeout != 0 {
+				packet := &Packet{
+					Code: CodeHeartbeat,
+					Val: HeartbeatPacket{
+						Seq: server.heartbeatSeq,
+					},
+				}
+				server.heartbeatSeq++
+				if err := client.SendPacket(packet); err != nil {
+					server.LogError(fmt.Errorf("Error sending heartbeat to %v: %v", client, err))
+				}
+			}
+			if timeout == 0 {
+				timeout = 1 * time.Second
+			}
+			time.Sleep(timeout)
+		}
+	}()
+}
+
 func ParseServerFlags(default_ip string, default_port int) string {
 	port := flag.Int("port", default_port, "The port to start the server")
 	ip := flag.String("host", default_ip, "The ip to listen for traffic")
+	//heartbeatReceiver := flag.String("heartbeat", "", "The server to send heartbeats to")
 	flag.Parse()
 	return net.JoinHostPort(*ip, strconv.Itoa(int(*port)))
 }

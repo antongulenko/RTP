@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/antongulenko/RTP/helpers"
 )
 
 const (
@@ -39,6 +41,7 @@ type ExtendedClient interface {
 	CheckReply(reply *Packet) error
 	CheckError(reply *Packet, expectedCode uint) error
 	Ping() error
+	ConfigureHeartbeat(receiver *Server, timeout time.Duration) error
 }
 
 type client struct {
@@ -77,6 +80,21 @@ func NewClient(local_ip string, protocol Protocol) (Client, error) {
 		localAddr: localAddr,
 		conn:      conn,
 	}, nil
+}
+
+func NewClientFor(server string, protocol Protocol) (Client, error) {
+	_, localAddr, err := helpers.ResolveUdp(server)
+	if err != nil {
+		return nil, err
+	}
+	client, err := NewClient(localAddr.IP.String(), protocol)
+	if err != nil {
+		return nil, err
+	}
+	if err = client.SetServer(server); err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func ExtendClient(client Client) ExtendedClient {
@@ -199,7 +217,7 @@ func (client *extendedClient) CheckReply(reply *Packet) error {
 }
 
 func (client *extendedClient) Ping() error {
-	ping := &PingValue{Value: pingRand.Int()}
+	ping := &PingPacket{Value: pingRand.Int()}
 	reply, err := client.SendRequest(CodePing, ping)
 	if err != nil {
 		return err
@@ -207,7 +225,7 @@ func (client *extendedClient) Ping() error {
 	if err = client.CheckError(reply, CodePong); err != nil {
 		return err
 	}
-	pong, ok := reply.Val.(*PongValue)
+	pong, ok := reply.Val.(*PongPacket)
 	if !ok {
 		return fmt.Errorf("Illegal Pong payload: (%T) %s", reply.Val, reply.Val)
 	}
@@ -215,4 +233,16 @@ func (client *extendedClient) Ping() error {
 		return fmt.Errorf("Server returned wrong Pong %s (expected %s)", pong.Value, ping.Pong())
 	}
 	return nil
+}
+
+func (client *extendedClient) ConfigureHeartbeat(receiver *Server, timeout time.Duration) error {
+	packet := ConfigureHeartbeatPacket{
+		TargetServer: receiver.LocalAddr.String(),
+		Timeout:      timeout,
+	}
+	reply, err := client.SendRequest(CodeConfigureHeartbeat, packet)
+	if err != nil {
+		return err
+	}
+	return client.CheckReply(reply)
 }

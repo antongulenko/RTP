@@ -2,7 +2,6 @@ package balancer
 
 import (
 	"fmt"
-	"net"
 	"sort"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -57,17 +56,9 @@ func NewBalancingPlugin(handler BalancingPluginHandler) *BalancingPlugin {
 }
 
 func (plugin *BalancingPlugin) AddBackendServer(addr string, stateCallback protocols.CircuitBreakerCallback) error {
-	serverAddr, err := net.ResolveUDPAddr("udp", addr)
+	serverAddr, localAddr, err := helpers.ResolveUdp(addr)
 	if err != nil {
 		return err
-	}
-	conn, err := net.DialUDP("udp", nil, serverAddr)
-	if err != nil {
-		return err
-	}
-	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return fmt.Errorf("Failed to convert to net.UDPAddr: %v", conn.LocalAddr())
 	}
 	client, err := plugin.handler.NewClient(localAddr.IP.String())
 	if err != nil {

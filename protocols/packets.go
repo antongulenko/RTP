@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 )
 
 const (
@@ -13,27 +14,38 @@ const (
 	CodeError
 	CodePing
 	CodePong
-	CodeOther
+	CodeHeartbeat
+	CodeConfigureHeartbeat
+	CodeOther // Extended protocol codes start here
 )
 
-type PingValue struct {
+type PingPacket struct {
 	Value int
 }
 
-type PongValue struct {
+type PongPacket struct {
 	Value int
 }
 
-func (ping *PingValue) PongValue() PongValue {
-	return PongValue{ping.Pong()}
+func (ping *PingPacket) PongValue() PongPacket {
+	return PongPacket{ping.Pong()}
 }
 
-func (ping *PingValue) Pong() int {
+func (ping *PingPacket) Pong() int {
 	return ping.Value + 1
 }
 
-func (pong *PongValue) Check(ping *PingValue) bool {
+func (pong *PongPacket) Check(ping *PingPacket) bool {
 	return pong.Value == ping.Pong()
+}
+
+type HeartbeatPacket struct {
+	Seq uint64
+}
+
+type ConfigureHeartbeatPacket struct {
+	TargetServer string
+	Timeout      time.Duration
 }
 
 type Protocol interface {
@@ -77,17 +89,31 @@ func decodePacket(reader io.Reader, protocol Protocol) (*Packet, error) {
 		}
 		packet.Val = val
 	case CodePing:
-		var val PingValue
+		var val PingPacket
 		err = dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding %v Ping value: %v", protocol.Name(), err)
 		}
 		packet.Val = &val
 	case CodePong:
-		var val PongValue
+		var val PongPacket
 		err = dec.Decode(&val)
 		if err != nil {
 			return nil, fmt.Errorf("Error decoding %v Pong value: %v", protocol.Name(), err)
+		}
+		packet.Val = &val
+	case CodeHeartbeat:
+		var val HeartbeatPacket
+		err = dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding %v Heartbeat value: %v", protocol.Name(), err)
+		}
+		packet.Val = &val
+	case CodeConfigureHeartbeat:
+		var val ConfigureHeartbeatPacket
+		err = dec.Decode(&val)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding %v ConfigureHeartbeat value: %v", protocol.Name(), err)
 		}
 		packet.Val = &val
 	default:
