@@ -55,7 +55,7 @@ func NewBalancingPlugin(handler BalancingPluginHandler) *BalancingPlugin {
 	}
 }
 
-func (plugin *BalancingPlugin) AddBackendServer(addr string, stateCallback protocols.CircuitBreakerCallback) error {
+func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.FaultDetectorCallback) error {
 	serverAddr, localAddr, err := helpers.ResolveUdp(addr)
 	if err != nil {
 		return err
@@ -77,10 +77,10 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, stateCallback proto
 	}
 	plugin.BackendServers = append(plugin.BackendServers, server)
 	sort.Sort(plugin.BackendServers)
-	if stateCallback != nil {
-		client.AddStateChangedCallback(stateCallback, client)
+	if callback != nil {
+		client.AddCallback(callback, client)
 	}
-	client.AddStateChangedCallback(plugin.serverStateChanged, server)
+	client.AddCallback(plugin.serverStateChanged, server)
 	client.Start()
 	return nil
 }

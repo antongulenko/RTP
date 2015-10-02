@@ -27,7 +27,12 @@ func NewPcpBalancingPlugin() *balancer.BalancingPlugin {
 }
 
 func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
-	return pcp.NewCircuitBreaker(localAddr)
+	client, err := pcp.NewClient(localAddr)
+	if err != nil {
+		return nil, err
+	}
+	detector := protocols.NewPingFaultDetector(protocols.ExtendClient(client))
+	return pcp.NewCircuitBreaker(localAddr, detector)
 }
 
 func (handler *pcpBalancingHandler) Protocol() protocols.Protocol {

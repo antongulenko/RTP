@@ -23,7 +23,12 @@ func NewAmpBalancingPlugin() *balancer.BalancingPlugin {
 }
 
 func (handler *ampBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
-	return amp.NewCircuitBreaker(localAddr)
+	client, err := amp.NewClient(localAddr)
+	if err != nil {
+		return nil, err
+	}
+	detector := protocols.NewPingFaultDetector(protocols.ExtendClient(client))
+	return amp.NewCircuitBreaker(localAddr, detector)
 }
 
 func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
