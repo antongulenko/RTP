@@ -147,6 +147,8 @@ func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failove
 			newServer.Load += 1 - backup_session_weight
 			newServer.Sessions[session] = true
 			session.PrimaryServer = newServer
+
+			session.LogServerError(fmt.Errorf("Session %v failed over to %v", session.Client, newServer))
 		} else {
 			// Failover failed - stop session
 			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, failoverErr)
