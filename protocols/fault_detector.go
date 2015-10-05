@@ -2,8 +2,8 @@ package protocols
 
 import (
 	"fmt"
+	"log"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -14,19 +14,19 @@ const (
 )
 
 var (
-	initialErr = fmt.Errorf("Status was not checked yet")
+	stateUnknown = fmt.Errorf("Status was not checked yet")
 )
 
 type FaultDetectorCallback func(key interface{})
 
 type FaultDetector interface {
-	Start()
 	Close() error
+	Check()
 
 	// Implemented by *faultDetectorBase
 	Error() error
 	Online() bool
-	DoOnline(execute func() error) bool
+	ErrorDetected(err error)
 	AddCallback(callback FaultDetectorCallback, key interface{})
 }
 
@@ -38,17 +38,21 @@ type faultDetectorCallbackData struct {
 type faultDetectorBase struct {
 	callbacks      []faultDetectorCallbackData
 	lastErr        error
-	lock           sync.Mutex
 	protocol       Protocol
 	observedServer *net.UDPAddr
+	closed         *helpers.OneshotCondition
 }
 
 func (detector *faultDetectorBase) AddCallback(callback FaultDetectorCallback, key interface{}) {
 	detector.callbacks = append(detector.callbacks, faultDetectorCallbackData{callback, key})
 }
 
+func (detector *faultDetectorBase) ErrorDetected(err error) {
+	detector.lastErr = err
+}
+
 func (detector *faultDetectorBase) Online() bool {
-	return detector.DoOnline(func() error { return nil })
+	return detector.lastErr == nil
 }
 
 func (detector *faultDetectorBase) Error() (err error) {
@@ -65,26 +69,30 @@ func (detector *faultDetectorBase) Error() (err error) {
 
 func (detector *faultDetectorBase) invokeCallback(wasOnline bool) {
 	isOnline := detector.lastErr == nil
-	if wasOnline != isOnline {
+	if wasOnline != isOnline && detector.lastErr != stateUnknown {
 		for _, data := range detector.callbacks {
 			data.callback(data.key)
 		}
 	}
 }
 
-func (detector *faultDetectorBase) DoOnline(execute func() error) bool {
-	// Double-checked locking for minimum wait-time
-	if detector.lastErr == nil {
-		detector.lock.Lock()
-		wasOnline := detector.lastErr == nil
-		defer detector.invokeCallback(wasOnline)
-		defer detector.lock.Unlock() // Unlock first, then invoke callback
-		if wasOnline {
-			detector.lastErr = execute()
-			return true
-		}
+func (detector *faultDetectorBase) performCheck(checker func() error) {
+	wasOnline := detector.Online()
+	detector.lastErr = checker()
+	detector.invokeCallback(wasOnline)
+}
+
+func (detector *faultDetectorBase) loopCheck(checker func(), timeout time.Duration) {
+	for !detector.closed.Enabled() {
+		checker()
+		time.Sleep(timeout)
 	}
-	return false
+	if detector.lastErr == nil {
+		detector.lastErr = fmt.Errorf("FaultDetector for %v is closed", detector.observedServer)
+	} else {
+		detector.lastErr = fmt.Errorf("FaultDetector for %v is closed. Previous error: %v", detector.observedServer, detector.lastErr)
+	}
+	detector.invokeCallback(detector.lastErr == nil)
 }
 
 type PingFaultDetector struct {
@@ -92,7 +100,7 @@ type PingFaultDetector struct {
 	client ExtendedClient
 }
 
-func DialNewPingFaultDetector(endpoint string) (FaultDetector, error) {
+func DialNewPingFaultDetector(endpoint string) (*PingFaultDetector, error) {
 	client, err := NewEmptyClientFor(endpoint)
 	if err != nil {
 		return nil, err
@@ -100,38 +108,31 @@ func DialNewPingFaultDetector(endpoint string) (FaultDetector, error) {
 	return NewPingFaultDetector(client), nil
 }
 
-func NewPingFaultDetector(client ExtendedClient) FaultDetector {
+func NewPingFaultDetector(client ExtendedClient) *PingFaultDetector {
 	return &PingFaultDetector{
 		faultDetectorBase: faultDetectorBase{
-			lastErr:        initialErr,
+			lastErr:        stateUnknown,
 			protocol:       client.Protocol(),
 			observedServer: client.Server(),
+			closed:         helpers.NewOneshotCondition(),
 		},
 		client: client,
 	}
 }
 
 func (detector *PingFaultDetector) Start() {
-	go detector.loopCheck(default_ping_check_duration)
+	go detector.loopCheck(detector.Check, default_ping_check_duration)
 }
 
-func (detector *PingFaultDetector) Close() error {
-	return detector.client.Close()
+func (detector *PingFaultDetector) Close() (err error) {
+	detector.closed.Enable(func() {
+		err = detector.client.Close()
+	})
+	return
 }
 
 func (detector *PingFaultDetector) Check() {
-	detector.lock.Lock()
-	wasOnline := detector.lastErr == nil
-	detector.lastErr = detector.client.Ping()
-	detector.lock.Unlock()
-	detector.invokeCallback(wasOnline)
-}
-
-func (detector *PingFaultDetector) loopCheck(timeout time.Duration) {
-	for !detector.client.Closed() {
-		detector.Check()
-		time.Sleep(timeout)
-	}
+	detector.performCheck(detector.client.Ping)
 }
 
 type HeartbeatServer struct {
@@ -156,6 +157,13 @@ func NewHeartbeatServer(server *Server) *HeartbeatServer {
 	return heartbeatServer
 }
 
+func (server *HeartbeatServer) Start() {
+	server.Server.Start()
+	for _, detector := range server.detectors {
+		detector.Start()
+	}
+}
+
 func (server *HeartbeatServer) Stop() {
 	for _, detector := range server.detectors {
 		if err := detector.Close(); err != nil {
@@ -166,6 +174,7 @@ func (server *HeartbeatServer) Stop() {
 }
 
 func (server *HeartbeatServer) heartbeatReceived(source *net.UDPAddr, beat *HeartbeatPacket) {
+	log.Println("Received heartbeat!")
 	received := time.Now()
 	addr := source.String()
 	if detector, ok := server.detectors[addr]; ok {
@@ -177,10 +186,11 @@ func (server *HeartbeatServer) heartbeatReceived(source *net.UDPAddr, beat *Hear
 
 type HeartbeatFaultDetector struct {
 	faultDetectorBase
-	server            *HeartbeatServer
-	addr              string
-	acceptableTimeout time.Duration
-	closed            *helpers.OneshotCondition
+	server             *HeartbeatServer
+	client             ExtendedClient
+	configError        error
+	acceptableTimeout  time.Duration
+	heartbeatFrequency time.Duration
 
 	seq                   uint64
 	lastHeartbeatSent     time.Time
@@ -188,42 +198,34 @@ type HeartbeatFaultDetector struct {
 }
 
 func (detector *HeartbeatFaultDetector) String() string {
-	return fmt.Sprintf("%v-HeartbeatFaultDetector for %v", detector.server.handler.Name(), detector.addr)
+	return fmt.Sprintf("%v-HeartbeatFaultDetector for %v", detector.server.handler.Name(), detector.observedServer)
 }
 
 func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency time.Duration, acceptableTimeout time.Duration) (FaultDetector, error) {
-	tmpClient, err := NewEmptyClientFor(endpoint)
+	client, err := NewEmptyClientFor(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err = tmpClient.Close(); err != nil {
-			server.LogError(fmt.Errorf("Failed to close connection: %v", err))
-		}
-	}()
-	addr := tmpClient.Server().String()
+	addr := client.Server().String()
 	if _, ok := server.detectors[addr]; ok {
+		_ = client.Close() // Drop error
 		return nil, fmt.Errorf("Server with address %v is already being observed.", addr)
 	}
 
 	detector := &HeartbeatFaultDetector{
 		faultDetectorBase: faultDetectorBase{
-			lastErr:        initialErr,
+			lastErr:        stateUnknown,
 			protocol:       server.handler,
-			observedServer: tmpClient.Server(),
+			observedServer: client.Server(),
+			closed:         helpers.NewOneshotCondition(),
 		},
-		addr:                  addr,
+		client:                client,
 		acceptableTimeout:     acceptableTimeout,
+		heartbeatFrequency:    heartbeatFrequency,
 		server:                server,
-		closed:                helpers.NewOneshotCondition(),
 		lastHeartbeatReceived: time.Now(),
 	}
 	server.detectors[addr] = detector
-	err = tmpClient.ConfigureHeartbeat(server.Server, heartbeatFrequency)
-	if err != nil {
-		delete(server.detectors, addr)
-		return nil, err
-	}
 	return detector, nil
 }
 
@@ -234,41 +236,55 @@ func (detector *HeartbeatFaultDetector) heartbeatReceived(received time.Time, be
 	detector.seq = beat.Seq + 1
 	detector.lastHeartbeatReceived = received
 	detector.lastHeartbeatSent = beat.TimeSent
+	detector.Check()
 }
 
 func (detector *HeartbeatFaultDetector) IsStopped() bool {
 	return detector.closed.Enabled() || detector.server.Stopped
 }
 
-func (detector *HeartbeatFaultDetector) detectTimeouts() {
-	for !detector.IsStopped() {
-		wasOnline := detector.lastErr == nil
+func (detector *HeartbeatFaultDetector) Check() {
+	detector.performCheck(func() error {
 		timeSinceLastHeartbeat := time.Now().Sub(detector.lastHeartbeatReceived)
-		isOnline := timeSinceLastHeartbeat <= detector.acceptableTimeout
-		if isOnline {
-			detector.lastErr = nil
+		if timeSinceLastHeartbeat <= detector.acceptableTimeout {
+			return nil
 		} else {
-			detector.lastErr = fmt.Errorf("Heartbeat timeout: last heartbeats %v ago", timeSinceLastHeartbeat)
+			var configErr string
+			if detector.configError != nil {
+				configErr = fmt.Sprintf(". Error configuring remote server: %v", detector.configError)
+			}
+			return fmt.Errorf("Heartbeat timeout: last heartbeat %v ago%s", timeSinceLastHeartbeat, configErr)
 		}
-		detector.invokeCallback(wasOnline)
+	})
+	if !detector.Online() {
+		detector.configureObservedServer()
 	}
-	if detector.lastErr == nil {
-		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed", detector.addr)
-	} else {
-		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed. Previous error: %v", detector.addr, detector.lastErr)
-	}
-	detector.invokeCallback(true)
+}
+
+func (detector *HeartbeatFaultDetector) configureObservedServer() {
+	detector.configError = detector.client.ConfigureHeartbeat(detector.server.Server, detector.heartbeatFrequency)
+	detector.seq = 0
 }
 
 func (detector *HeartbeatFaultDetector) Start() {
 	if !detector.IsStopped() {
-		go detector.detectTimeouts()
+		detector.configureObservedServer() // Once when starting up
+		func() {
+			// TODO sleep something less than the timeout. This is random and probably will not scale.
+			timeout := detector.acceptableTimeout
+			time.Sleep(timeout) // Sleep now to wait for first heartbeat
+			go detector.loopCheck(detector.Check, timeout)
+		}()
 	}
 }
 
 func (detector *HeartbeatFaultDetector) Close() error {
+	var err helpers.MultiError
 	detector.closed.Enable(func() {
-		delete(detector.server.detectors, detector.addr)
+		delete(detector.server.detectors, detector.observedServer.String())
+		// Notify remote server to stop sending heartbeats.
+		err.Add(detector.client.ConfigureHeartbeat(detector.server.Server, 0))
+		err.Add(detector.client.Close())
 	})
-	return nil
+	return err.NilOrError()
 }

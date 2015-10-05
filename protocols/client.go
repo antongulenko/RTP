@@ -240,9 +240,6 @@ func (client *extendedClient) ConfigureHeartbeat(receiver *Server, timeout time.
 		TargetServer: receiver.LocalAddr.String(),
 		Timeout:      timeout,
 	}
-	reply, err := client.SendRequest(CodeConfigureHeartbeat, packet)
-	if err != nil {
-		return err
-	}
-	return client.CheckReply(reply)
+	// Do not wait for a reply.
+	return client.Send(CodeConfigureHeartbeat, packet)
 }

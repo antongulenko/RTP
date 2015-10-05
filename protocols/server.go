@@ -201,7 +201,11 @@ func (server *Server) ConfigureHeartbeat(receiver string, timeout time.Duration)
 	server.heartbeatReceiver = addr
 	server.heartbeatSeq = 0
 	if addr != nil && timeout > 0 {
+		// Not really an error.
+		server.LogError(fmt.Errorf("Sending heartbeats to %s every %v", server.heartbeatReceiver, timeout))
 		server.heartbeatRunning.Enable(server.sendHeartbeats)
+	} else {
+		server.LogError(fmt.Errorf("Stopped sending heartbeats"))
 	}
 	return nil
 }

@@ -14,7 +14,6 @@ const (
 type CircuitBreaker interface {
 	ExtendedClient
 
-	Start()
 	Error() error
 	Online() bool
 
@@ -70,24 +69,26 @@ func (breaker *circuitBreaker) Protocol() Protocol {
 	return breaker.client.Protocol()
 }
 
-func (breaker *circuitBreaker) SendPacket(packet *Packet) (err error) {
-	online := breaker.DoOnline(func() error {
-		err = breaker.client.SendPacket(packet)
+func (breaker *circuitBreaker) SendPacket(packet *Packet) error {
+	if breaker.Online() {
+		err := breaker.client.SendPacket(packet)
+		if err != nil {
+			breaker.ErrorDetected(err)
+		}
 		return err
-	})
-	if !online {
-		err = breaker.Error()
+	} else {
+		return breaker.Error()
 	}
-	return
 }
 
 func (breaker *circuitBreaker) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
-	online := breaker.DoOnline(func() error {
-		reply, err = breaker.client.SendRequestPacket(packet)
-		return err
-	})
-	if !online {
-		err = breaker.Error()
+	if breaker.Online() {
+		reply, err := breaker.client.SendRequestPacket(packet)
+		if err != nil {
+			breaker.ErrorDetected(err)
+		}
+		return reply, err
+	} else {
+		return nil, breaker.Error()
 	}
-	return
 }

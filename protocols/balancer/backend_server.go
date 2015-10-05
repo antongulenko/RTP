@@ -103,6 +103,7 @@ func (server *BackendServer) handleStateChanged() {
 	if err := server.Client.Error(); err != nil {
 		// Server fault detected!
 		if len(server.Sessions) == 0 {
+			server.Plugin.assertStarted()
 			server.Plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no sessions are affected", server.Client))
 			return
 		}
