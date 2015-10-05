@@ -1,4 +1,4 @@
-package amp_balancer
+package balancer
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type BackendServer struct {
 	Addr           *net.UDPAddr
 	LocalAddr      *net.UDPAddr
 	Client         protocols.CircuitBreaker
-	Sessions       map[*balancingSession]bool
+	Sessions       map[*BalancingSession]bool
 	Plugin         *BalancingPlugin
 	BackupSessions uint
 	Load           float64 // 1 per session + backup_session_weight per backup session
@@ -75,7 +75,7 @@ func (_slice *BackendServerSlice) removeServer(toRemove *BackendServer) {
 	*_slice = slice[:len(slice)-1]
 }
 
-func (server *BackendServer) registerSession(session *balancingSession) {
+func (server *BackendServer) registerSession(session *BalancingSession) {
 	server.Sessions[session] = true
 	server.Load++
 	for _, backup := range session.BackupServers {
@@ -84,7 +84,7 @@ func (server *BackendServer) registerSession(session *balancingSession) {
 	}
 }
 
-func (server *BackendServer) unregisterSession(session *balancingSession) {
+func (server *BackendServer) unregisterSession(session *BalancingSession) {
 	delete(server.Sessions, session)
 	server.Load--
 	for _, backup := range session.BackupServers {
@@ -95,7 +95,7 @@ func (server *BackendServer) unregisterSession(session *balancingSession) {
 
 type failoverResults struct {
 	newServer *BackendServer
-	session   *balancingSession
+	session   *BalancingSession
 	err       error
 }
 
@@ -120,11 +120,11 @@ func (server *BackendServer) handleStateChanged() {
 	}
 }
 
-func (server *BackendServer) failoverSession(session *balancingSession, failoverChan chan<- failoverResults, wg *sync.WaitGroup) {
+func (server *BackendServer) failoverSession(session *BalancingSession, failoverChan chan<- failoverResults, wg *sync.WaitGroup) {
 	// Fencing: Stop the original node just to be sure.
 	// TODO more reliable fencing.
-	session.BackgroundStopRemote()
-	if newServer, err := session.HandleServerFault(); err != nil {
+	session.Handler.BackgroundStopRemote()
+	if newServer, err := session.Handler.HandleServerFault(); err != nil {
 		failoverChan <- failoverResults{nil, session, err}
 	} else {
 		failoverChan <- failoverResults{newServer, session, nil}
@@ -145,7 +145,7 @@ func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failove
 			newServer.BackupSessions--
 			newServer.Load += 1 - backup_session_weight
 			newServer.Sessions[session] = true
-			session.Server = newServer
+			session.PrimaryServer = newServer
 		} else {
 			// Failover failed - stop session
 			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, failoverErr)
