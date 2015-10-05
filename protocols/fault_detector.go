@@ -92,6 +92,14 @@ type PingFaultDetector struct {
 	client ExtendedClient
 }
 
+func DialNewPingFaultDetector(endpoint string) (FaultDetector, error) {
+	client, err := NewEmptyClientFor(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return NewPingFaultDetector(client), nil
+}
+
 func NewPingFaultDetector(client ExtendedClient) FaultDetector {
 	return &PingFaultDetector{
 		faultDetectorBase: faultDetectorBase{
@@ -129,6 +137,14 @@ func (detector *PingFaultDetector) loopCheck(timeout time.Duration) {
 type HeartbeatServer struct {
 	*Server
 	detectors map[string]*HeartbeatFaultDetector
+}
+
+func NewEmptyHeartbeatServer(local_addr string) (*HeartbeatServer, error) {
+	if server, err := NewEmptyServer(local_addr); err == nil {
+		return NewHeartbeatServer(server), nil
+	} else {
+		return nil, err
+	}
 }
 
 func NewHeartbeatServer(server *Server) *HeartbeatServer {
@@ -175,7 +191,7 @@ func (detector *HeartbeatFaultDetector) String() string {
 }
 
 func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency time.Duration, acceptableTimeout time.Duration) (FaultDetector, error) {
-	tmpClient, err := NewClientFor(endpoint, new(EmptyProtocol))
+	tmpClient, err := NewEmptyClientFor(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +205,7 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 		return nil, fmt.Errorf("Server with address %v is already being observed.", addr)
 	}
 
-	err = ExtendClient(tmpClient).ConfigureHeartbeat(server.Server, heartbeatFrequency)
+	err = tmpClient.ConfigureHeartbeat(server.Server, heartbeatFrequency)
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +240,7 @@ func (detector *HeartbeatFaultDetector) IsStopped() bool {
 func (detector *HeartbeatFaultDetector) detectTimeouts() {
 	for !detector.IsStopped() {
 		// TODO
+		//wasOnline := detector.lastErr == nil
 	}
 	if detector.lastErr == nil {
 		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed", detector.addr)
