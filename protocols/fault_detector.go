@@ -2,7 +2,6 @@ package protocols
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -174,7 +173,6 @@ func (server *HeartbeatServer) Stop() {
 }
 
 func (server *HeartbeatServer) heartbeatReceived(source *net.UDPAddr, beat *HeartbeatPacket) {
-	log.Println("Received heartbeat!")
 	received := time.Now()
 	addr := source.String()
 	if detector, ok := server.detectors[addr]; ok {
