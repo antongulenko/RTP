@@ -28,13 +28,13 @@ type circuitBreaker struct {
 	*Client
 }
 
-func NewCircuitBreaker(local_ip string) (CircuitBreaker, error) {
+func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (CircuitBreaker, error) {
 	proto := new(AmpProtocol)
 	baseClient, err := protocols.NewExtendedClient(local_ip, proto)
 	if err != nil {
 		return nil, err
 	}
-	breaker := protocols.NewCircuitBreaker(baseClient)
+	breaker := protocols.NewCircuitBreaker(baseClient, detector)
 	return &circuitBreaker{
 		CircuitBreaker: breaker,
 		Client: &Client{

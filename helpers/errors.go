@@ -42,6 +42,12 @@ func (err MultiError) NilOrError() error {
 	return err
 }
 
+func (err *MultiError) Add(errOrNil error) {
+	if err != nil && errOrNil != nil {
+		*err = append(*err, errOrNil)
+	}
+}
+
 func (err MultiError) Error() string {
 	switch len(err) {
 	case 0:
