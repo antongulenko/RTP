@@ -24,7 +24,7 @@ type BalancingPlugin struct {
 }
 
 type BalancingPluginHandler interface {
-	NewClient(localAddr string) (protocols.CircuitBreaker, error)
+	NewClient(localAddr string) (protocols.ExtendedClient, error)
 	Protocol() protocols.Protocol
 
 	// Create and fully initialize new session. The param data is passed from
