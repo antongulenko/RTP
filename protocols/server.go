@@ -100,6 +100,7 @@ func (server *Server) listen() {
 				return // error because of read from closed connection
 			}
 			server.LogError(err)
+			server.ReplyError(packet, err)
 		} else {
 			server.handle(packet)
 		}
@@ -112,7 +113,7 @@ func (server *Server) handle(request *Packet) {
 	case CodeOK:
 		server.LogError(errors.New("Received standalone OK message"))
 	case CodeError:
-		server.LogError(fmt.Errorf("Received Error: %s", request.Error()))
+		server.LogError(fmt.Errorf("Received standalone Error: %s", request.Error()))
 	case CodePong:
 		server.LogError(fmt.Errorf("Received standalone Pong message"))
 	case CodePing:
