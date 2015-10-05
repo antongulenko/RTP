@@ -90,7 +90,7 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.
 		client.AddCallback(callback, client)
 	}
 	client.AddCallback(plugin.serverStateChanged, server)
-	client.Start()
+	client.Start() // Start FaultDetector inside CircuitBreaker
 	return nil
 }
 
