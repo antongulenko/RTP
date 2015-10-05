@@ -102,11 +102,6 @@ type failoverResults struct {
 func (server *BackendServer) handleStateChanged() {
 	if err := server.Client.Error(); err != nil {
 		// Server fault detected!
-		if len(server.Sessions) == 0 {
-			server.Plugin.assertStarted()
-			server.Plugin.Server.LogError(fmt.Errorf("Backend server %v is down, but no sessions are affected", server.Client))
-			return
-		}
 		go func() {
 			failoverChan := make(chan failoverResults, len(server.Sessions))
 			var wg sync.WaitGroup
@@ -148,7 +143,7 @@ func (server *BackendServer) handleFinishedFailovers(failoverChan <-chan failove
 			newServer.Sessions[session] = true
 			session.PrimaryServer = newServer
 
-			session.LogServerError(fmt.Errorf("Session %v failed over to %v", session.Client, newServer))
+			session.LogServerError(fmt.Errorf("Session for %v failed over to %v", session.Client, newServer))
 		} else {
 			// Failover failed - stop session
 			err := fmt.Errorf("Could not handle server fault for session %v: %v", session.Client, failoverErr)
