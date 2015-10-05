@@ -15,7 +15,6 @@ type CircuitBreaker interface {
 	ExtendedClient
 
 	Start()
-	Check()
 	Error() error
 	Online() bool
 
@@ -51,6 +50,7 @@ func (breaker *circuitBreaker) Closed() bool {
 }
 
 func (breaker *circuitBreaker) SetServer(server_addr string) error {
+	// This can be wrong if the FaultDetector uses a different server
 	return breaker.client.SetServer(server_addr)
 }
 

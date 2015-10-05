@@ -27,7 +27,7 @@ type Server struct {
 	heartbeatReceiver Client
 	heartbeatTimeout  time.Duration
 	heartbeatSeq      uint64
-	HeartbeatHandler  func(*HeartbeatPacket)
+	HeartbeatHandler  func(source *net.UDPAddr, beat *HeartbeatPacket)
 
 	Wg        *sync.WaitGroup
 	Stopped   bool
@@ -132,7 +132,7 @@ func (server *Server) handle(request *Packet) {
 	case CodeHeartbeat:
 		if beat, ok := val.(*HeartbeatPacket); ok {
 			if server.HeartbeatHandler == nil {
-				server.HeartbeatHandler(beat)
+				server.HeartbeatHandler(request.SourceAddr, beat)
 			} else {
 				server.LogError(fmt.Errorf("Received unexpected Heartbeat from %v", request.SourceAddr))
 			}
@@ -212,7 +212,8 @@ func (server *Server) sendHeartbeats() {
 				packet := &Packet{
 					Code: CodeHeartbeat,
 					Val: HeartbeatPacket{
-						Seq: server.heartbeatSeq,
+						TimeSent: time.Now(),
+						Seq:      server.heartbeatSeq,
 					},
 				}
 				server.heartbeatSeq++

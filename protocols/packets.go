@@ -40,7 +40,8 @@ func (pong *PongPacket) Check(ping *PingPacket) bool {
 }
 
 type HeartbeatPacket struct {
-	Seq uint64
+	TimeSent time.Time
+	Seq      uint64
 }
 
 type ConfigureHeartbeatPacket struct {
