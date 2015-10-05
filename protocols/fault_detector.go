@@ -206,22 +206,25 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 		return nil, fmt.Errorf("Server with address %v is already being observed.", addr)
 	}
 
-	err = tmpClient.ConfigureHeartbeat(server.Server, heartbeatFrequency)
-	if err != nil {
-		return nil, err
-	}
 	detector := &HeartbeatFaultDetector{
 		faultDetectorBase: faultDetectorBase{
 			lastErr:        initialErr,
 			protocol:       server.handler,
 			observedServer: tmpClient.Server(),
 		},
-		addr:              addr,
-		acceptableTimeout: acceptableTimeout,
-		server:            server,
-		closed:            helpers.NewOneshotCondition(),
+		addr:                  addr,
+		acceptableTimeout:     acceptableTimeout,
+		server:                server,
+		closed:                helpers.NewOneshotCondition(),
+		lastHeartbeatReceived: time.Now(),
 	}
 	server.detectors[addr] = detector
+	err = tmpClient.ConfigureHeartbeat(server.Server, heartbeatFrequency)
+	if err == nil {
+		delete(server.detectors, addr)
+	} else {
+		return nil, err
+	}
 	return detector, nil
 }
 
