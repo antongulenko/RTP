@@ -13,7 +13,7 @@ const (
 	backup_session_weight = 0.1
 )
 
-type FaultDetectorFactory func(endpoing string) (protocols.FaultDetector, error)
+type FaultDetectorFactory func(endpoint string) (protocols.FaultDetector, error)
 
 type BalancingPlugin struct {
 	Server         *protocols.PluginServer
@@ -90,7 +90,6 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.
 		client.AddCallback(callback, client)
 	}
 	client.AddCallback(plugin.serverStateChanged, server)
-	client.Start() // Start FaultDetector inside CircuitBreaker
 	return nil
 }
 
@@ -132,17 +131,27 @@ func (plugin *BalancingPlugin) Stop() error {
 func (plugin *BalancingPlugin) serverStateChanged(key interface{}) {
 	server, ok := key.(*BackendServer)
 	if !ok {
+		plugin.assertStarted()
 		plugin.Server.LogError(fmt.Errorf("Could not handle server fault: Failed to convert %v (%T) to *BackendServer", key, key))
 		return
 	}
 	server.handleStateChanged()
 }
 
+func (plugin *BalancingPlugin) assertStarted() {
+	// TODO HACK for debugging
+	if plugin.Server == nil {
+		panic("BalancingPlugin was not yet started")
+	}
+}
+
 func (session *BalancingSession) StopContainingSession() error {
+	session.Plugin.assertStarted()
 	return session.Plugin.Server.StopSession(session.Client)
 }
 
 func (session *BalancingSession) LogServerError(err error) {
+	session.Plugin.assertStarted()
 	session.Plugin.Server.LogError(err)
 }
 
