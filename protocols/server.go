@@ -52,9 +52,13 @@ func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	localUdpAddr, ok := listenConn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, fmt.Errorf("Failed to convert to *net.UdpAddr: %v", listenConn.LocalAddr())
+	}
 	return &Server{
 		Wg:         new(sync.WaitGroup),
-		LocalAddr:  udpAddr,
+		LocalAddr:  localUdpAddr,
 		handler:    handler,
 		listenConn: listenConn,
 		errors:     make(chan error, ErrorChanBuffer),
