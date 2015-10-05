@@ -24,7 +24,7 @@ type BalancingPlugin struct {
 }
 
 type BalancingPluginHandler interface {
-	NewClient(localAddr string) (protocols.ExtendedClient, error)
+	NewClient(localAddr string, detector protocols.FaultDetector) (protocols.CircuitBreaker, error)
 	Protocol() protocols.Protocol
 
 	// Create and fully initialize new session. The param data is passed from
@@ -64,17 +64,19 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.
 	if err != nil {
 		return err
 	}
-	clientBase, err := plugin.handler.NewClient(localAddr.IP.String())
-	if err != nil {
-		return err
-	}
 	detector, err := plugin.make_detector(addr)
 	if err != nil {
 		return err
 	}
-	client := protocols.NewCircuitBreaker(clientBase, detector)
+	client, err := plugin.handler.NewClient(localAddr.IP.String(), detector)
+	if err != nil {
+		_ = detector.Close()
+		return err
+	}
 	err = client.SetServer(serverAddr.String())
 	if err != nil {
+		_ = detector.Close()
+		_ = client.Close()
 		return err
 	}
 	server := &BackendServer{
