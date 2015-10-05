@@ -18,8 +18,8 @@ type ampBalancingSession struct {
 	receiverPort int
 }
 
-func NewAmpBalancingPlugin() *balancer.BalancingPlugin {
-	return balancer.NewBalancingPlugin(new(ampBalancingHandler))
+func NewAmpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balancer.BalancingPlugin {
+	return balancer.NewBalancingPlugin(new(ampBalancingHandler), make_detector)
 }
 
 func (handler *ampBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {

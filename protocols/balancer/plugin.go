@@ -13,11 +13,14 @@ const (
 	backup_session_weight = 0.1
 )
 
+type FaultDetectorFactory func(endpoing string) (protocols.FaultDetector, error)
+
 type BalancingPlugin struct {
 	Server         *protocols.PluginServer
 	BackendServers BackendServerSlice
 
-	handler BalancingPluginHandler
+	make_detector FaultDetectorFactory
+	handler       BalancingPluginHandler
 }
 
 type BalancingPluginHandler interface {
@@ -48,10 +51,11 @@ type BalancingSessionHandler interface {
 	HandleServerFault() (*BackendServer, error)
 }
 
-func NewBalancingPlugin(handler BalancingPluginHandler) *BalancingPlugin {
+func NewBalancingPlugin(handler BalancingPluginHandler, make_detector FaultDetectorFactory) *BalancingPlugin {
 	return &BalancingPlugin{
 		handler:        handler,
 		BackendServers: make(BackendServerSlice, 0, 10),
+		make_detector:  make_detector,
 	}
 }
 
@@ -60,10 +64,15 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.
 	if err != nil {
 		return err
 	}
-	client, err := plugin.handler.NewClient(localAddr.IP.String())
+	clientBase, err := plugin.handler.NewClient(localAddr.IP.String())
 	if err != nil {
 		return err
 	}
+	detector, err := plugin.make_detector(addr)
+	if err != nil {
+		return err
+	}
+	client := protocols.NewCircuitBreaker(clientBase, detector)
 	err = client.SetServer(serverAddr.String())
 	if err != nil {
 		return err

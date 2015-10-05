@@ -2,17 +2,21 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"log"
+	"time"
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/balancer"
 	"github.com/antongulenko/RTP/proxies/amp_balancer"
 )
 
 var (
-	amp_servers = []string{"127.0.0.1:7777"}
-	pcp_servers = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
+	amp_servers      = []string{"127.0.0.1:7777"}
+	pcp_servers      = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
+	heartbeat_server = "127.0.0.1:0" // Random port
 )
 
 func printAmpErrors(server *protocols.PluginServer) {
@@ -53,13 +57,30 @@ func stateChangePrinter(key interface{}) {
 }
 
 func main() {
+	useHeartbeat := flag.Bool("heartbeat", false, "Use heartbeat-based fault detection instead of active ping-based detection")
+	_heartbeat_frequency := flag.Uint("heartbeat_frequency", 200, "Time between two heartbeats which observers will send (milliseconds)")
+	_heartbeat_timeout := flag.Uint("heartbeat_timeout", 350, "Time between two heartbeats before assuming offline server (milliseconds)")
 	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7779)
-	ampPlugin := amp_balancer.NewAmpBalancingPlugin()
+	heartbeat_frequency := time.Duration(*_heartbeat_frequency) * time.Millisecond
+	heartbeat_timeout := time.Duration(*_heartbeat_timeout) * time.Millisecond
+
+	var detector_factory balancer.FaultDetectorFactory
+	if *useHeartbeat {
+		heartbeatServer, err := protocols.NewEmptyHeartbeatServer(heartbeat_server)
+		Checkerr(err)
+		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
+			return heartbeatServer.ObserveServer(endpoint, heartbeat_frequency, heartbeat_timeout)
+		}
+	} else {
+		detector_factory = protocols.DialNewPingFaultDetector
+	}
+
+	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
 	for _, amp := range amp_servers {
 		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
 		Checkerr(err)
 	}
-	pcpPlugin := amp_balancer.NewPcpBalancingPlugin()
+	pcpPlugin := amp_balancer.NewPcpBalancingPlugin(detector_factory)
 	for _, pcp := range pcp_servers {
 		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
 		Checkerr(err)

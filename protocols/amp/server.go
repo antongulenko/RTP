@@ -23,9 +23,6 @@ type Handler interface {
 }
 
 func NewServer(local_addr string, handler Handler) (server *Server, err error) {
-	if handler == nil {
-		return nil, fmt.Errorf("Need non-nil amp.Handler")
-	}
 	server = &Server{handler: handler}
 	server.Server, err = protocols.NewServer(local_addr, server)
 	if err != nil {
