@@ -6,9 +6,13 @@ import (
 	"github.com/antongulenko/RTP/protocols"
 )
 
+var (
+	PcpProtocol *PcpProtocolImpl // "Singleton"
+)
+
 type Client struct {
 	protocols.ExtendedClient
-	*PcpProtocol
+	*PcpProtocolImpl
 }
 
 type CircuitBreaker interface {
@@ -34,8 +38,7 @@ type circuitBreaker struct {
 }
 
 func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (CircuitBreaker, error) {
-	proto := new(PcpProtocol)
-	baseClient, err := protocols.NewExtendedClient(local_ip, proto)
+	baseClient, err := protocols.NewExtendedClient(local_ip, PcpProtocol)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +47,6 @@ func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (Circu
 		CircuitBreaker: breaker,
 		Client: &Client{
 			ExtendedClient: breaker,
-			PcpProtocol:    proto,
 		},
 	}, nil
 }

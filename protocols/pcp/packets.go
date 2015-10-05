@@ -58,18 +58,18 @@ func (desc *ProxyDescription) ListenPort() (int, error) {
 	return strconv.Atoi(port)
 }
 
-type PcpProtocol struct {
+type PcpProtocolImpl struct {
 }
 
-func (*PcpProtocol) Name() string {
+func (*PcpProtocolImpl) Name() string {
 	return "PCP"
 }
 
-func (*PcpProtocol) DefaultBufferSize() uint {
+func (*PcpProtocolImpl) DefaultBufferSize() uint {
 	return 512
 }
 
-func (*PcpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
+func (*PcpProtocolImpl) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
 	switch code {
 	case CodeStartProxy:
 		var val StartProxy

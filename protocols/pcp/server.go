@@ -8,7 +8,7 @@ import (
 
 type Server struct {
 	*protocols.Server
-	*PcpProtocol
+	PcpProtocolImpl
 	handler Handler
 }
 
