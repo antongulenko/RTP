@@ -22,8 +22,8 @@ type pcpBalancingSession struct {
 	proxyPort        int
 }
 
-func NewPcpBalancingPlugin() *balancer.BalancingPlugin {
-	return balancer.NewBalancingPlugin(new(pcpBalancingHandler))
+func NewPcpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balancer.BalancingPlugin {
+	return balancer.NewBalancingPlugin(new(pcpBalancingHandler), make_detector)
 }
 
 func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
@@ -31,7 +31,7 @@ func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.Circu
 	if err != nil {
 		return nil, err
 	}
-	detector := protocols.NewPingFaultDetector(protocols.ExtendClient(client))
+	detector := protocols.NewPingFaultDetector(client)
 	return pcp.NewCircuitBreaker(localAddr, detector)
 }
 
