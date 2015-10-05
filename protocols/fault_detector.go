@@ -239,8 +239,15 @@ func (detector *HeartbeatFaultDetector) IsStopped() bool {
 
 func (detector *HeartbeatFaultDetector) detectTimeouts() {
 	for !detector.IsStopped() {
-		// TODO
-		//wasOnline := detector.lastErr == nil
+		wasOnline := detector.lastErr == nil
+		timeSinceLastHeartbeat := time.Now().Sub(detector.lastHeartbeatReceived)
+		isOnline := timeSinceLastHeartbeat <= detector.acceptableTimeout
+		if isOnline {
+			detector.lastErr = nil
+		} else {
+			detector.lastErr = fmt.Errorf("Heartbeat timeout: last heartbeats %v ago", timeSinceLastHeartbeat)
+		}
+		detector.invokeCallback(wasOnline)
 	}
 	if detector.lastErr == nil {
 		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed", detector.addr)
