@@ -4,7 +4,7 @@ import "github.com/antongulenko/RTP/protocols"
 
 type Client struct {
 	protocols.ExtendedClient
-	*AmpProtocol
+	*AmpProtocolImpl
 }
 
 type CircuitBreaker interface {
@@ -29,8 +29,7 @@ type circuitBreaker struct {
 }
 
 func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (CircuitBreaker, error) {
-	proto := new(AmpProtocol)
-	baseClient, err := protocols.NewExtendedClient(local_ip, proto)
+	baseClient, err := protocols.NewExtendedClient(local_ip, AmpProtocol)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +38,6 @@ func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (Circu
 		CircuitBreaker: breaker,
 		Client: &Client{
 			ExtendedClient: breaker,
-			AmpProtocol:    proto,
 		},
 	}, nil
 }

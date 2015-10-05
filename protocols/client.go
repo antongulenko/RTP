@@ -62,11 +62,11 @@ func NewClient(local_ip string, protocol Protocol) (Client, error) {
 	if protocol == nil {
 		return nil, fmt.Errorf("Need non-nil Protocol")
 	}
-	localAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(local_ip, "0"))
+	localAddr, err := net.ResolveUDPAddr("udp4", net.JoinHostPort(local_ip, "0"))
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP("udp", localAddr)
+	conn, err := net.ListenUDP("udp4", localAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (client *client) SetTimeout(timeout time.Duration) {
 }
 
 func (client *client) SetServer(server_addr string) error {
-	serverAddr, err := net.ResolveUDPAddr("udp", server_addr)
+	serverAddr, err := net.ResolveUDPAddr("udp4", server_addr)
 	if err != nil {
 		return err
 	}

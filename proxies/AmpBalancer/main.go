@@ -19,9 +19,9 @@ var (
 	heartbeat_server = "balancer:0" // Random port
 )
 
-func printAmpErrors(server *protocols.PluginServer) {
+func printServerErrors(servername string, server *protocols.Server) {
 	for err := range server.Errors() {
-		log.Println("Server error: " + err.Error())
+		log.Println(servername + " error: " + err.Error())
 	}
 }
 
@@ -69,6 +69,7 @@ func main() {
 	if *useHeartbeat {
 		heartbeatServer, err := protocols.NewEmptyHeartbeatServer(heartbeat_server)
 		Checkerr(err)
+		go printServerErrors("Heartbeat", heartbeatServer.Server)
 		heartbeatServer.Start()
 		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr)
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
@@ -96,7 +97,7 @@ func main() {
 	server.AddPlugin(ampPlugin)
 	server.AddPlugin(pcpPlugin)
 
-	go printAmpErrors(server)
+	go printServerErrors("Server", server.Server)
 	server.SessionStartedCallback = printSessionStarted
 	server.SessionStoppedCallback = printSessionStopped
 
