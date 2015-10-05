@@ -66,18 +66,26 @@ func main() {
 
 	var detector_factory balancer.FaultDetectorFactory
 	var observees []Observee
+	var heartbeatServer *protocols.HeartbeatServer
 	if *useHeartbeat {
-		heartbeatServer, err := protocols.NewEmptyHeartbeatServer(heartbeat_server)
+		var err error
+		heartbeatServer, err = protocols.NewEmptyHeartbeatServer(heartbeat_server)
 		Checkerr(err)
 		go printServerErrors("Heartbeat", heartbeatServer.Server)
-		heartbeatServer.Start()
 		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr)
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
 			return heartbeatServer.ObserveServer(endpoint, heartbeat_frequency, heartbeat_timeout)
 		}
 		observees = append(observees, heartbeatServer)
 	} else {
-		detector_factory = protocols.DialNewPingFaultDetector
+		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
+			detector, err := protocols.DialNewPingFaultDetector(endpoint)
+			if err != nil {
+				return nil, err
+			}
+			detector.Start()
+			return detector, nil
+		}
 	}
 
 	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
@@ -101,10 +109,14 @@ func main() {
 	server.SessionStartedCallback = printSessionStarted
 	server.SessionStoppedCallback = printSessionStopped
 
-	server.Start()
-
 	log.Println("Listening to AMP on " + amp_addr)
 	log.Println("Press Ctrl-C to close")
+
+	server.Start()
+	if heartbeatServer != nil {
+		heartbeatServer.Start()
+	}
+
 	observees = append(observees, &NoopObservee{ExternalInterrupt(), "external interrupt"})
 	WaitAndStopObservees(nil, observees)
 }

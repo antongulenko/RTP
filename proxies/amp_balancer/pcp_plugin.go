@@ -26,13 +26,8 @@ func NewPcpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balance
 	return balancer.NewBalancingPlugin(new(pcpBalancingHandler), make_detector)
 }
 
-func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.CircuitBreaker, error) {
-	client, err := pcp.NewClient(localAddr)
-	if err != nil {
-		return nil, err
-	}
-	detector := protocols.NewPingFaultDetector(client)
-	return pcp.NewCircuitBreaker(localAddr, detector)
+func (handler *pcpBalancingHandler) NewClient(localAddr string) (protocols.ExtendedClient, error) {
+	return pcp.NewClient(localAddr)
 }
 
 func (handler *pcpBalancingHandler) Protocol() protocols.Protocol {

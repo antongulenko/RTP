@@ -13,7 +13,7 @@ type emptyProtocol struct {
 }
 
 func (*emptyProtocol) Name() string {
-	return "Empty"
+	return "Generic"
 }
 
 func (*emptyProtocol) DefaultBufferSize() uint {
@@ -21,7 +21,7 @@ func (*emptyProtocol) DefaultBufferSize() uint {
 }
 
 func (*emptyProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
-	return nil, fmt.Errorf("Unknown Empty protocol code: %v", code)
+	return nil, fmt.Errorf("Unknown Generic protocol code: %v", code)
 }
 
 type EmptyServerHandler struct {
@@ -33,7 +33,7 @@ func (handler *EmptyServerHandler) StopServer() {
 	// Nothing.
 }
 func (handler *EmptyServerHandler) HandleRequest(request *Packet) {
-	handler.LogError(fmt.Errorf("Received unexpected Empty code: %v", request.Code))
+	handler.LogError(fmt.Errorf("Received unexpected Generic code: %v", request.Code))
 }
 
 func NewEmptyServer(local_addr string) (*Server, error) {
