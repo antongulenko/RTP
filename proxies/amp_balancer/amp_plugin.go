@@ -22,8 +22,8 @@ func NewAmpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balance
 	return balancer.NewBalancingPlugin(new(ampBalancingHandler), make_detector)
 }
 
-func (handler *ampBalancingHandler) NewClient(localAddr string) (protocols.ExtendedClient, error) {
-	return amp.NewClient(localAddr)
+func (handler *ampBalancingHandler) NewClient(localAddr string, detector protocols.FaultDetector) (protocols.CircuitBreaker, error) {
+	return amp.NewCircuitBreaker(localAddr, detector)
 }
 
 func (handler *ampBalancingHandler) Protocol() protocols.Protocol {
