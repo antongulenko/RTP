@@ -149,7 +149,8 @@ func NewEmptyHeartbeatServer(local_addr string) (*HeartbeatServer, error) {
 
 func NewHeartbeatServer(server *Server) *HeartbeatServer {
 	heartbeatServer := &HeartbeatServer{
-		Server: server,
+		Server:    server,
+		detectors: make(map[string]*HeartbeatFaultDetector),
 	}
 	server.HeartbeatHandler = heartbeatServer.heartbeatReceived
 	return heartbeatServer
