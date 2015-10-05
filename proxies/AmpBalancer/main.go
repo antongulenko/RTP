@@ -65,12 +65,16 @@ func main() {
 	heartbeat_timeout := time.Duration(*_heartbeat_timeout) * time.Millisecond
 
 	var detector_factory balancer.FaultDetectorFactory
+	var observees []Observee
 	if *useHeartbeat {
 		heartbeatServer, err := protocols.NewEmptyHeartbeatServer(heartbeat_server)
 		Checkerr(err)
+		heartbeatServer.Start()
+		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr)
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
 			return heartbeatServer.ObserveServer(endpoint, heartbeat_frequency, heartbeat_timeout)
 		}
+		observees = append(observees, heartbeatServer)
 	} else {
 		detector_factory = protocols.DialNewPingFaultDetector
 	}
@@ -88,6 +92,7 @@ func main() {
 
 	server, err := amp_balancer.NewAmpPluginServer(amp_addr)
 	Checkerr(err)
+	observees = append(observees, server)
 	server.AddPlugin(ampPlugin)
 	server.AddPlugin(pcpPlugin)
 
@@ -99,8 +104,6 @@ func main() {
 
 	log.Println("Listening to AMP on " + amp_addr)
 	log.Println("Press Ctrl-C to close")
-	WaitAndStopObservees(nil, []Observee{
-		server,
-		&NoopObservee{ExternalInterrupt(), "external interrupt"},
-	})
+	observees = append(observees, &NoopObservee{ExternalInterrupt(), "external interrupt"})
+	WaitAndStopObservees(nil, observees)
 }
