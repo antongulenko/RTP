@@ -177,5 +177,5 @@ func (session *BalancingSession) Cleanup() error {
 }
 
 func (session *BalancingSession) String() string {
-	return session.PrimaryServer.String()
+	return fmt.Sprintf("Session for %v on %v", session.Client, session.PrimaryServer.String())
 }
