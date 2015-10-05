@@ -23,11 +23,14 @@ type Server struct {
 	errors     chan error
 	handler    ServerHandler
 
+	// For sending heartbeats
 	heartbeatRunning  *helpers.OneshotCondition
-	heartbeatReceiver Client
+	heartbeatReceiver *net.UDPAddr
 	heartbeatTimeout  time.Duration
 	heartbeatSeq      uint64
-	HeartbeatHandler  func(source *net.UDPAddr, beat *HeartbeatPacket)
+
+	// For receiving heartbeats
+	HeartbeatHandler func(source *net.UDPAddr, beat *HeartbeatPacket)
 
 	Wg        *sync.WaitGroup
 	Stopped   bool
@@ -44,11 +47,11 @@ func NewServer(local_addr string, handler ServerHandler) (*Server, error) {
 	if handler == nil {
 		return nil, fmt.Errorf("Need non-nil ServerHandler")
 	}
-	udpAddr, err := net.ResolveUDPAddr("udp", local_addr)
+	udpAddr, err := net.ResolveUDPAddr("udp4", local_addr)
 	if err != nil {
 		return nil, err
 	}
-	listenConn, err := net.ListenUDP("udp", udpAddr)
+	listenConn, err := net.ListenUDP("udp4", udpAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +140,10 @@ func (server *Server) handle(request *Packet) {
 		}
 	case CodeHeartbeat:
 		if beat, ok := val.(*HeartbeatPacket); ok {
-			if server.HeartbeatHandler == nil {
+			if server.HeartbeatHandler != nil {
 				server.HeartbeatHandler(request.SourceAddr, beat)
 			} else {
-				server.LogError(fmt.Errorf("Received unexpected Heartbeat from %v", request.SourceAddr))
+				server.LogError(fmt.Errorf("Received Heartbeat from %v, but HeartbeatHandler is not configured", request.SourceAddr))
 			}
 		} else {
 			server.LogError(fmt.Errorf("%s Heartbeat received with wrong payload: (%T) %v", server.handler.Name(), val, val))
@@ -183,25 +186,21 @@ func (server *Server) LogError(err error) {
 }
 
 func (server *Server) ConfigureHeartbeat(receiver string, timeout time.Duration) error {
-	var client Client
-	var err error
+	var addr *net.UDPAddr
 	if receiver != "" {
-		client, err = NewClientFor(receiver, new(EmptyProtocol))
+		var err error
+		addr, err = net.ResolveUDPAddr("udp4", receiver)
 		if err != nil {
-			return err
+			return fmt.Errorf("Failed to resolve heartbeat-receiver %s: %v", receiver, err)
 		}
 	}
+
 	// TODO potential race condition. This should only be called once.
-	oldReceiver := server.heartbeatReceiver
+	// TODO once started the sendHeartbeats routine will keep spinning even if heartbeats are disabled again
 	server.heartbeatTimeout = timeout
-	server.heartbeatReceiver = client
+	server.heartbeatReceiver = addr
 	server.heartbeatSeq = 0
-	if oldReceiver != nil {
-		if err := oldReceiver.Close(); err != nil {
-			server.LogError(fmt.Errorf("Failed to close previous heartbeat receiver: %v", err))
-		}
-	}
-	if client != nil {
+	if addr != nil && timeout > 0 {
 		server.heartbeatRunning.Enable(server.sendHeartbeats)
 	}
 	return nil
@@ -211,10 +210,10 @@ func (server *Server) sendHeartbeats() {
 	server.Wg.Add(1)
 	go func() {
 		defer server.Wg.Done()
-		for {
-			client := server.heartbeatReceiver
+		for !server.Stopped {
+			receiver := server.heartbeatReceiver
 			timeout := server.heartbeatTimeout
-			if client != nil && timeout != 0 {
+			if receiver != nil && timeout != 0 {
 				packet := &Packet{
 					Code: CodeHeartbeat,
 					Val: HeartbeatPacket{
@@ -222,9 +221,14 @@ func (server *Server) sendHeartbeats() {
 						Seq:      server.heartbeatSeq,
 					},
 				}
+				// Special routine for sending heartbeats to allow using the server port as source address
 				server.heartbeatSeq++
-				if err := client.SendPacket(packet); err != nil {
-					server.LogError(fmt.Errorf("Error sending heartbeat to %v: %v", client, err))
+				err := packet.sendPacket(server.listenConn, receiver, EmptyProtocol)
+				if server.Stopped {
+					break
+				}
+				if err != nil {
+					server.LogError(fmt.Errorf("Error sending heartbeat to %v: %v", receiver, err))
 				}
 			}
 			if timeout == 0 {

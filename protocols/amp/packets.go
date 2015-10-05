@@ -12,6 +12,10 @@ import (
 	"github.com/antongulenko/RTP/protocols"
 )
 
+var (
+	AmpProtocol *AmpProtocolImpl // "Singleton"
+)
+
 const (
 	CodeStartStream = protocols.CodeOther + iota
 	CodeStopStream
@@ -51,18 +55,18 @@ func (client *ClientDescription) Client() string {
 	return net.JoinHostPort(client.ReceiverHost, strconv.Itoa(client.Port))
 }
 
-type AmpProtocol struct {
+type AmpProtocolImpl struct {
 }
 
-func (*AmpProtocol) Name() string {
+func (*AmpProtocolImpl) Name() string {
 	return "AMP"
 }
 
-func (*AmpProtocol) DefaultBufferSize() uint {
+func (*AmpProtocolImpl) DefaultBufferSize() uint {
 	return 512
 }
 
-func (*AmpProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
+func (*AmpProtocolImpl) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
 	switch code {
 	case CodeStartStream:
 		var val StartStream

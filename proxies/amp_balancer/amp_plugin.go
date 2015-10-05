@@ -9,7 +9,7 @@ import (
 )
 
 type ampBalancingHandler struct {
-	amp.AmpProtocol
+	amp.AmpProtocolImpl
 }
 
 type ampBalancingSession struct {

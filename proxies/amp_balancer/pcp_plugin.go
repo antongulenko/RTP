@@ -10,7 +10,7 @@ import (
 )
 
 type pcpBalancingHandler struct {
-	pcp.PcpProtocol
+	pcp.PcpProtocolImpl
 }
 
 type pcpBalancingSession struct {

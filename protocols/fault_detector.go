@@ -167,11 +167,11 @@ func (server *HeartbeatServer) Stop() {
 
 func (server *HeartbeatServer) heartbeatReceived(source *net.UDPAddr, beat *HeartbeatPacket) {
 	received := time.Now()
-	ip := source.String()
-	if detector, ok := server.detectors[ip]; ok {
+	addr := source.String()
+	if detector, ok := server.detectors[addr]; ok {
 		detector.heartbeatReceived(received, beat)
 	} else {
-		server.LogError(fmt.Errorf("Unexpected heartbeat (seq %v) from %v", beat.Seq, source))
+		server.LogError(fmt.Errorf("Unexpected heartbeat (seq %v) from %v", beat.Seq, addr))
 	}
 }
 
@@ -220,9 +220,8 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 	}
 	server.detectors[addr] = detector
 	err = tmpClient.ConfigureHeartbeat(server.Server, heartbeatFrequency)
-	if err == nil {
+	if err != nil {
 		delete(server.detectors, addr)
-	} else {
 		return nil, err
 	}
 	return detector, nil
@@ -256,7 +255,7 @@ func (detector *HeartbeatFaultDetector) detectTimeouts() {
 	if detector.lastErr == nil {
 		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed", detector.addr)
 	} else {
-		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed. Previous error: %v", detector.lastErr)
+		detector.lastErr = fmt.Errorf("HeartbeatFaultDetector for %v is closed. Previous error: %v", detector.addr, detector.lastErr)
 	}
 	detector.invokeCallback(true)
 }

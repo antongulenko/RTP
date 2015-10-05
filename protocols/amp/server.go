@@ -8,7 +8,7 @@ import (
 
 type Server struct {
 	*protocols.Server
-	*AmpProtocol
+	AmpProtocolImpl
 	handler Handler
 }
 
