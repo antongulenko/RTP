@@ -5,11 +5,15 @@ import (
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/amp"
+	"github.com/antongulenko/RTP/protocols/amp_control"
+	"github.com/antongulenko/RTP/protocols/heartbeat"
+	"github.com/antongulenko/RTP/protocols/ping"
 	"github.com/antongulenko/RTP/proxies"
 )
 
 const (
-	rtsp_url       = "rtsp://127.0.1.1:8554"
+	rtsp_url       = "rtsp://127.0.0.1:8554"
 	local_media_ip = "127.0.0.1"
 )
 
@@ -32,18 +36,23 @@ func printRtspStop(rtsp *Command, px []*proxies.UdpProxy) {
 func main() {
 	proxies.UdpProxyFlags()
 	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7777)
-	proxy, err := proxies.NewAmpProxy(amp_addr, rtsp_url, local_media_ip)
+
+	proto, err := protocols.NewProtocol("AMP", amp.Protocol, amp_control.Protocol, ping.Protocol, heartbeat.Protocol)
+	Checkerr(err)
+	server, err := protocols.NewServer(amp_addr, proto)
+	Checkerr(err)
+	proxy, err := proxies.RegisterAmpProxy(server, rtsp_url, local_media_ip)
 	Checkerr(err)
 
 	go printAmpErrors(proxy)
 	proxy.StreamStartedCallback = printRtspStart
 	proxy.StreamStoppedCallback = printRtspStop
-	proxy.Start()
+	server.Start()
 
-	log.Println("Listening to AMP on " + amp_addr + ", backend URL: " + rtsp_url)
+	log.Println("Listening:", server, "Backend URL:", rtsp_url)
 	log.Println("Press Ctrl-D to close")
 	WaitAndStopObservees(nil, []Observee{
-		proxy,
+		server,
 		&NoopObservee{StdinClosed(), "stdin closed"},
 	})
 }

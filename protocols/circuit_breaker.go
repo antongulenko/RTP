@@ -1,6 +1,7 @@
 package protocols
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -12,29 +13,36 @@ const (
 )
 
 type CircuitBreaker interface {
-	ExtendedClient
+	Client
 
 	Error() error
 	Online() bool
-
 	AddCallback(callback FaultDetectorCallback, key interface{})
 }
 
 type circuitBreaker struct {
-	ExtendedClient // Extended self
 	FaultDetector
-
-	client ExtendedClient // Backend client for the actual operations
+	client Client // Backend client for the actual operations
 }
 
-func NewCircuitBreaker(client ExtendedClient, detector FaultDetector) CircuitBreaker {
-	client.SetTimeout(checkRequestTimeout)
+func NewCircuitBreakerOn(localAddr string, protocol Protocol, detector FaultDetector) (CircuitBreaker, error) {
+	client, err := NewClient(localAddr, protocol)
+	if err != nil {
+		return nil, err
+	}
+	return NewCircuitBreaker(client, detector)
+}
+
+func NewCircuitBreaker(client Client, detector FaultDetector) (CircuitBreaker, error) {
 	breaker := &circuitBreaker{
 		client:        client,
 		FaultDetector: detector,
 	}
-	breaker.ExtendedClient = ExtendClient(breaker)
-	return breaker
+	client.SetTimeout(checkRequestTimeout)
+	if err := client.SetServer(detector.ObservedServer().String()); err != nil {
+		return nil, err
+	}
+	return breaker, nil
 }
 
 func (breaker *circuitBreaker) Close() error {
@@ -49,8 +57,10 @@ func (breaker *circuitBreaker) Closed() bool {
 }
 
 func (breaker *circuitBreaker) SetServer(server_addr string) error {
-	// This can be wrong if the FaultDetector uses a different server
-	return breaker.client.SetServer(server_addr)
+	if breaker.ObservedServer().String() != server_addr {
+		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", breaker.ObservedServer(), server_addr)
+	}
+	return nil
 }
 
 func (breaker *circuitBreaker) Server() *net.UDPAddr {
@@ -58,7 +68,7 @@ func (breaker *circuitBreaker) Server() *net.UDPAddr {
 }
 
 func (breaker *circuitBreaker) String() string {
-	return breaker.client.String()
+	return fmt.Sprintf("CircuitBreaker(%v)", breaker.client.String())
 }
 
 func (breaker *circuitBreaker) SetTimeout(timeout time.Duration) {
@@ -67,6 +77,14 @@ func (breaker *circuitBreaker) SetTimeout(timeout time.Duration) {
 
 func (breaker *circuitBreaker) Protocol() Protocol {
 	return breaker.client.Protocol()
+}
+
+func (breaker *circuitBreaker) CheckError(reply *Packet, expectedCode Code) error {
+	return breaker.client.CheckError(reply, expectedCode)
+}
+
+func (breaker *circuitBreaker) CheckReply(reply *Packet) error {
+	return breaker.client.CheckReply(reply)
 }
 
 func (breaker *circuitBreaker) SendPacket(packet *Packet) error {
@@ -91,4 +109,18 @@ func (breaker *circuitBreaker) SendRequestPacket(packet *Packet) (reply *Packet,
 	} else {
 		return nil, breaker.Error()
 	}
+}
+
+func (breaker *circuitBreaker) Send(code Code, val interface{}) error {
+	return breaker.SendPacket(&Packet{
+		Code: code,
+		Val:  val,
+	})
+}
+
+func (breaker *circuitBreaker) SendRequest(code Code, val interface{}) (*Packet, error) {
+	return breaker.SendRequestPacket(&Packet{
+		Code: code,
+		Val:  val,
+	})
 }

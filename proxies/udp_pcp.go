@@ -11,7 +11,7 @@ import (
 )
 
 type PcpProxy struct {
-	*pcp.Server
+	*protocols.Server
 	sessions protocols.Sessions
 
 	ProxyStartedCallback func(proxy *UdpProxy)
@@ -27,15 +27,15 @@ type udpSession struct {
 	proxy *PcpProxy
 }
 
-func NewPcpProxy(pcpAddr string) (proxy *PcpProxy, err error) {
-	proxy = &PcpProxy{
+func RegisterPcpProxy(server *protocols.Server) (*PcpProxy, error) {
+	proxy := &PcpProxy{
 		sessions: make(protocols.Sessions),
+		Server:   server,
 	}
-	proxy.Server, err = pcp.NewServer(pcpAddr, proxy)
-	if err != nil {
-		proxy = nil
+	if err := pcp.RegisterServer(server, proxy); err != nil {
+		return nil, err
 	}
-	return
+	return proxy, nil
 }
 
 func (proxy *PcpProxy) StopServer() {

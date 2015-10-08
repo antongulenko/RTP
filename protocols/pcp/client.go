@@ -6,49 +6,25 @@ import (
 	"github.com/antongulenko/RTP/protocols"
 )
 
-var (
-	PcpProtocol *PcpProtocolImpl // "Singleton"
-)
+// ======================= Client =======================
 
 type Client struct {
-	protocols.ExtendedClient
-	*PcpProtocolImpl
+	protocols.Client
 }
 
-type CircuitBreaker interface {
-	protocols.CircuitBreaker
-	StartProxy(listenAddr string, targetAddr string) error
-	StopProxy(listenAddr string, targetAddr string) error
-	StartProxyPair(proxyHost, receiverHost string, receiverPort1, receiverPort2 int) (*StartProxyPairResponse, error)
-	StopProxyPair(proxyPort1 int) error
-}
-
-func NewClient(local_ip string) (client *Client, err error) {
-	client = new(Client)
-	client.ExtendedClient, err = protocols.NewExtendedClient(local_ip, client)
-	if err != nil {
-		client = nil
+func NewClient(client protocols.Client) (*Client, error) {
+	if err := client.Protocol().CheckIncludesFragment(Protocol.Name()); err != nil {
+		return nil, err
 	}
-	return
+	return &Client{client}, nil
 }
 
-type circuitBreaker struct {
-	protocols.CircuitBreaker
-	*Client
-}
-
-func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (CircuitBreaker, error) {
-	baseClient, err := protocols.NewExtendedClient(local_ip, PcpProtocol)
+func NewClientFor(server_addr string) (*Client, error) {
+	client, err := protocols.NewMiniClientFor(server_addr, Protocol)
 	if err != nil {
 		return nil, err
 	}
-	breaker := protocols.NewCircuitBreaker(baseClient, detector)
-	return &circuitBreaker{
-		CircuitBreaker: breaker,
-		Client: &Client{
-			ExtendedClient: breaker,
-		},
-	}, nil
+	return &Client{client}, nil
 }
 
 func (client *Client) StartProxy(listenAddr string, targetAddr string) error {
@@ -58,7 +34,7 @@ func (client *Client) StartProxy(listenAddr string, targetAddr string) error {
 			TargetAddr: targetAddr,
 		},
 	}
-	reply, err := client.SendRequest(CodeStartProxy, val)
+	reply, err := client.SendRequest(codeStartProxy, val)
 	if err != nil {
 		return err
 	}
@@ -72,7 +48,7 @@ func (client *Client) StopProxy(listenAddr string, targetAddr string) error {
 			TargetAddr: targetAddr,
 		},
 	}
-	reply, err := client.SendRequest(CodeStopProxy, val)
+	reply, err := client.SendRequest(codeStopProxy, val)
 	if err != nil {
 		return err
 	}
@@ -86,11 +62,11 @@ func (client *Client) StartProxyPair(proxyHost, receiverHost string, receiverPor
 		ReceiverPort1: receiverPort1,
 		ReceiverPort2: receiverPort2,
 	}
-	reply, err := client.SendRequest(CodeStartProxyPair, val)
+	reply, err := client.SendRequest(codeStartProxyPair, val)
 	if err != nil {
 		return nil, err
 	}
-	if err = client.CheckError(reply, CodeStartProxyPairResponse); err != nil {
+	if err = client.CheckError(reply, codeStartProxyPairResponse); err != nil {
 		return nil, err
 	}
 	response, ok := reply.Val.(*StartProxyPairResponse)
@@ -104,7 +80,7 @@ func (client *Client) StopProxyPair(proxyPort1 int) error {
 	val := &StopProxyPair{
 		ProxyPort1: proxyPort1,
 	}
-	reply, err := client.SendRequest(CodeStopProxyPair, val)
+	reply, err := client.SendRequest(codeStopProxyPair, val)
 	if err != nil {
 		return err
 	}

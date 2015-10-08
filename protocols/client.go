@@ -2,7 +2,6 @@ package protocols
 
 import (
 	"fmt"
-	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -14,10 +13,6 @@ const (
 	DefaultTimeout = time.Second * 1
 )
 
-var (
-	pingRand = rand.New(rand.NewSource(time.Now().Unix()))
-)
-
 type Client interface {
 	Close() error
 	Closed() bool
@@ -26,42 +21,28 @@ type Client interface {
 	Server() *net.UDPAddr
 	SetTimeout(timeout time.Duration)
 	Protocol() Protocol
+	String() string
 
 	SendPacket(packet *Packet) error
+	Send(code Code, val interface{}) error
+	SendRequest(code Code, val interface{}) (*Packet, error)
 	SendRequestPacket(packet *Packet) (reply *Packet, err error)
-
-	String() string
-}
-
-type ExtendedClient interface {
-	Client
-
-	Send(code uint, val interface{}) error
-	SendRequest(code uint, val interface{}) (*Packet, error)
 	CheckReply(reply *Packet) error
-	CheckError(reply *Packet, expectedCode uint) error
-	Ping() error
-	ConfigureHeartbeat(receiver *Server, timeout time.Duration) error
+	CheckError(reply *Packet, expectedCode Code) error
 }
 
 type client struct {
-	serverAddr  *net.UDPAddr
-	localAddr   *net.UDPAddr
+	serverAddr *net.UDPAddr
+	localAddr  *net.UDPAddr
+	conn       *net.UDPConn
+
 	protocol    Protocol
 	timeout     time.Duration
-	conn        *net.UDPConn
-	closed      bool
+	closed      *helpers.OneshotCondition
 	requestLock sync.Mutex
 }
 
-type extendedClient struct {
-	Client
-}
-
 func NewClient(local_ip string, protocol Protocol) (Client, error) {
-	if protocol == nil {
-		return nil, fmt.Errorf("Need non-nil Protocol")
-	}
 	localAddr, err := net.ResolveUDPAddr("udp4", net.JoinHostPort(local_ip, "0"))
 	if err != nil {
 		return nil, err
@@ -72,6 +53,7 @@ func NewClient(local_ip string, protocol Protocol) (Client, error) {
 	}
 	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
+		_ = conn.Close()
 		return nil, fmt.Errorf("Failed to get *UDPAddr from UDPConn.LocalAddr()")
 	}
 	return &client{
@@ -79,6 +61,7 @@ func NewClient(local_ip string, protocol Protocol) (Client, error) {
 		protocol:  protocol,
 		localAddr: localAddr,
 		conn:      conn,
+		closed:    helpers.NewOneshotCondition(),
 	}, nil
 }
 
@@ -92,33 +75,26 @@ func NewClientFor(server string, protocol Protocol) (Client, error) {
 		return nil, err
 	}
 	if err = client.SetServer(server); err != nil {
+		_ = client.Close()
 		return nil, err
 	}
 	return client, nil
 }
 
-func ExtendClient(client Client) ExtendedClient {
-	return &extendedClient{client}
+func NewMiniClientFor(server_addr string, fragment ProtocolFragment) (Client, error) {
+	proto := NewMiniProtocol(fragment)
+	return NewClientFor(server_addr, proto)
 }
 
-func NewExtendedClient(local_ip string, protocol Protocol) (result ExtendedClient, err error) {
-	client, err := NewClient(local_ip, protocol)
-	if err == nil {
-		result = ExtendClient(client)
-	}
+func (client *client) Close() (err error) {
+	client.closed.Enable(func() {
+		err = client.conn.Close()
+	})
 	return
 }
 
-func (client *client) Close() error {
-	if !client.closed {
-		client.closed = true
-		return client.conn.Close()
-	}
-	return nil
-}
-
 func (client *client) Closed() bool {
-	return client.closed
+	return client.closed.Enabled()
 }
 
 func (client *client) String() string {
@@ -184,23 +160,27 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 	return
 }
 
-func (client *extendedClient) Send(code uint, val interface{}) error {
+func (client *client) Send(code Code, val interface{}) error {
 	return client.SendPacket(&Packet{
 		Code: code,
 		Val:  val,
 	})
 }
 
-func (client *extendedClient) SendRequest(code uint, val interface{}) (*Packet, error) {
+func (client *client) SendRequest(code Code, val interface{}) (*Packet, error) {
 	return client.SendRequestPacket(&Packet{
 		Code: code,
 		Val:  val,
 	})
 }
 
-func (client *extendedClient) CheckError(reply *Packet, expectedCode uint) error {
-	if reply.IsError() {
-		return fmt.Errorf("%v error: %v", client.Protocol().Name(), reply.Error())
+func (client *client) CheckError(reply *Packet, expectedCode Code) error {
+	if reply.Code == CodeError {
+		var errString string
+		if reply.Code == CodeError {
+			errString, _ = reply.Val.(string)
+		}
+		return fmt.Errorf("%v error: %v", client.Protocol().Name(), errString)
 	}
 	if reply.Code != expectedCode {
 		return fmt.Errorf("Unexpected %s reply code %v. Expected %v. Payload: %v",
@@ -209,37 +189,9 @@ func (client *extendedClient) CheckError(reply *Packet, expectedCode uint) error
 	return nil
 }
 
-func (client *extendedClient) CheckReply(reply *Packet) error {
+func (client *client) CheckReply(reply *Packet) error {
 	if err := client.CheckError(reply, CodeOK); err != nil {
 		return err
 	}
 	return nil
-}
-
-func (client *extendedClient) Ping() error {
-	ping := &PingPacket{Value: pingRand.Int()}
-	reply, err := client.SendRequest(CodePing, ping)
-	if err != nil {
-		return err
-	}
-	if err = client.CheckError(reply, CodePong); err != nil {
-		return err
-	}
-	pong, ok := reply.Val.(*PongPacket)
-	if !ok {
-		return fmt.Errorf("Illegal Pong payload: (%T) %s", reply.Val, reply.Val)
-	}
-	if !pong.Check(ping) {
-		return fmt.Errorf("Server returned wrong Pong %s (expected %s)", pong.Value, ping.Pong())
-	}
-	return nil
-}
-
-func (client *extendedClient) ConfigureHeartbeat(receiver *Server, timeout time.Duration) error {
-	packet := ConfigureHeartbeatPacket{
-		TargetServer: receiver.LocalAddr.String(),
-		Timeout:      timeout,
-	}
-	// Do not wait for a reply.
-	return client.Send(CodeConfigureHeartbeat, packet)
 }
