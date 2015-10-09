@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	proxyOnError = OnErrorRetry
+	proxyOnError = OnErrorPause
 )
 
 type AmpProxy struct {
