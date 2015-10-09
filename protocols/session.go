@@ -60,10 +60,11 @@ func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase,
 
 func (sessions Sessions) DeleteSessions() error {
 	errors := make(helpers.MultiError, 0, len(sessions))
-	for _, session := range sessions {
+	for key, session := range sessions {
 		if err := session.StopAndFormatError(); err != nil {
 			errors = append(errors, err)
 		}
+		delete(sessions, key)
 	}
 	return errors.NilOrError()
 }

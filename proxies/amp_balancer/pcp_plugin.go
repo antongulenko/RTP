@@ -10,12 +10,11 @@ import (
 )
 
 type pcpBalancingHandler struct {
-	pcp.PcpProtocolImpl
 }
 
 type pcpBalancingSession struct {
 	balancingSession *balancer.BalancingSession
-	client           pcp.CircuitBreaker
+	client           *pcp.Client
 	receiverHost     string
 	receiverPort     int
 	proxyHost        string
@@ -27,21 +26,21 @@ func NewPcpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balance
 }
 
 func (handler *pcpBalancingHandler) NewClient(localAddr string, detector protocols.FaultDetector) (protocols.CircuitBreaker, error) {
-	return pcp.NewCircuitBreaker(localAddr, detector)
+	return protocols.NewCircuitBreakerOn(localAddr, pcp.MiniProtocol, detector)
 }
 
 func (handler *pcpBalancingHandler) Protocol() protocols.Protocol {
-	return handler
+	return pcp.MiniProtocol
 }
 
 func (handler *pcpBalancingHandler) NewSession(balancingSession *balancer.BalancingSession, param protocols.SessionParameter) (balancer.BalancingSessionHandler, error) {
-	client, ok := balancingSession.PrimaryServer.Client.(pcp.CircuitBreaker)
-	if !ok {
-		return nil, fmt.Errorf("Illegal client type for pcpBalancingHandler: %T", balancingSession.PrimaryServer.Client)
-	}
 	desc, ok := param.(*amp.StartStream)
 	if !ok {
 		return nil, fmt.Errorf("Illegal session parameter type for pcpBalancingHandler: %T", param)
+	}
+	client, err := pcp.NewClient(balancingSession.PrimaryServer.Client)
+	if err != nil {
+		return nil, err
 	}
 
 	proxyHost := client.Server().IP.String()
@@ -90,13 +89,13 @@ func (session *pcpBalancingSession) HandleServerFault() (*balancer.BackendServer
 
 	// Find and initialize backup server
 	var usedBackup *balancer.BackendServer
-	var pcpBackup pcp.CircuitBreaker
+	var pcpBackup *pcp.Client
 	var resp *pcp.StartProxyPairResponse
 	for _, backup := range session.balancingSession.BackupServers {
-		var ok bool
-		pcpBackup, ok = backup.Client.(pcp.CircuitBreaker)
+		var err error
+		pcpBackup, err = pcp.NewClient(backup.Client)
 		// TODO log errors that prevented a backup server from being used?
-		if ok {
+		if err == nil {
 			var err error
 			proxyHost := pcpBackup.Server().IP.String()
 			// TODO The proxyHost could be different. See the comment above in NewSession.

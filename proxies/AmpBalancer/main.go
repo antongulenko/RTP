@@ -9,7 +9,10 @@ import (
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/balancer"
+	"github.com/antongulenko/RTP/protocols/heartbeat"
+	"github.com/antongulenko/RTP/protocols/ping"
 	"github.com/antongulenko/RTP/proxies/amp_balancer"
 )
 
@@ -66,10 +69,10 @@ func main() {
 
 	var detector_factory balancer.FaultDetectorFactory
 	var observees []Observee
-	var heartbeatServer *protocols.HeartbeatServer
+	var heartbeatServer *heartbeat.HeartbeatServer
 	if *useHeartbeat {
 		var err error
-		heartbeatServer, err = protocols.NewEmptyHeartbeatServer(heartbeat_server)
+		heartbeatServer, err = heartbeat.NewHeartbeatServer(heartbeat_server)
 		Checkerr(err)
 		go printServerErrors("Heartbeat", heartbeatServer.Server)
 		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr)
@@ -79,7 +82,7 @@ func main() {
 		observees = append(observees, heartbeatServer)
 	} else {
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
-			detector, err := protocols.DialNewPingFaultDetector(endpoint)
+			detector, err := ping.DialNewFaultDetector(endpoint)
 			if err != nil {
 				return nil, err
 			}
@@ -99,7 +102,11 @@ func main() {
 		Checkerr(err)
 	}
 
-	server, err := amp_balancer.NewAmpPluginServer(amp_addr)
+	protocol, err := protocols.NewProtocol("AMP", amp.Protocol, ping.Protocol, heartbeat.Protocol)
+	Checkerr(err)
+	baseServer, err := protocols.NewServer(amp_addr, protocol)
+	Checkerr(err)
+	server, err := amp_balancer.RegisterPluginServer(baseServer)
 	Checkerr(err)
 	observees = append(observees, server)
 	server.AddPlugin(ampPlugin)

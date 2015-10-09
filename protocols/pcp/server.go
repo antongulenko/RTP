@@ -6,12 +6,6 @@ import (
 	"github.com/antongulenko/RTP/protocols"
 )
 
-type Server struct {
-	*protocols.Server
-	PcpProtocolImpl
-	handler Handler
-}
-
 type Handler interface {
 	StartProxy(val *StartProxy) error
 	StopProxy(val *StopProxy) error
@@ -20,54 +14,68 @@ type Handler interface {
 	StopServer()
 }
 
-func NewServer(local_addr string, handler Handler) (server *Server, err error) {
-	server = &Server{handler: handler}
-	server.Server, err = protocols.NewServer(local_addr, server)
-	if err != nil {
-		server = nil
+func RegisterServer(server *protocols.Server, handler Handler) error {
+	if err := server.Protocol().CheckIncludesFragment(Protocol.Name()); err != nil {
+		return err
 	}
-	return
+	state := &serverState{
+		Server:  server,
+		handler: handler,
+	}
+	if err := server.RegisterHandlers(protocols.ServerHandlerMap{
+		codeStartProxy:     state.handleStartProxy,
+		codeStopProxy:      state.handleStopProxy,
+		codeStartProxyPair: state.handleStartProxyPair,
+		codeStopProxyPair:  state.handleStopProxyPair,
+	}); err != nil {
+		return err
+	}
+	server.RegisterStopHandler(state.stopServer)
+	return nil
 }
 
-func (server *Server) StopServer() {
+type serverState struct {
+	*protocols.Server
+	handler Handler
+}
+
+func (server *serverState) stopServer() {
 	server.handler.StopServer()
 }
 
-func (server *Server) HandleRequest(packet *protocols.Packet) {
-	val := packet.Val
-	switch packet.Code {
-	case CodeStartProxy:
-		if desc, ok := val.(*StartProxy); ok {
-			server.ReplyCheck(packet, server.handler.StartProxy(desc))
+func (server *serverState) handleStartProxy(packet *protocols.Packet) {
+	if desc, ok := packet.Val.(*StartProxy); ok {
+		server.ReplyCheck(packet, server.handler.StartProxy(desc))
+	} else {
+		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxy: %v", packet.Val))
+	}
+}
+
+func (server *serverState) handleStopProxy(packet *protocols.Packet) {
+	if desc, ok := packet.Val.(*StopProxy); ok {
+		server.ReplyCheck(packet, server.handler.StopProxy(desc))
+	} else {
+		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxy: %v", packet.Val))
+	}
+}
+
+func (server *serverState) handleStartProxyPair(packet *protocols.Packet) {
+	if desc, ok := packet.Val.(*StartProxyPair); ok {
+		reply, err := server.handler.StartProxyPair(desc)
+		if err == nil {
+			server.Reply(packet, codeStartProxyPairResponse, reply)
 		} else {
-			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxy: %v", packet.Val))
+			server.ReplyError(packet, err)
 		}
-	case CodeStopProxy:
-		if desc, ok := val.(*StopProxy); ok {
-			server.ReplyCheck(packet, server.handler.StopProxy(desc))
-		} else {
-			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxy: %v", packet.Val))
-		}
-	case CodeStartProxyPair:
-		if desc, ok := val.(*StartProxyPair); ok {
-			reply, err := server.handler.StartProxyPair(desc)
-			if err == nil {
-				server.Reply(packet, CodeStartProxyPairResponse, reply)
-			} else {
-				server.ReplyError(packet, err)
-			}
-		} else {
-			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxyPair: %v", packet.Val))
-		}
-	case CodeStopProxyPair:
-		if desc, ok := val.(*StopProxyPair); ok {
-			server.ReplyCheck(packet, server.handler.StopProxyPair(desc))
-		} else {
-			server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxyPair: %v", packet.Val))
-		}
-	case CodeStartProxyPairResponse:
-		server.LogError(fmt.Errorf("Received standalone StartProxyPairResponse message"))
-	default:
-		server.LogError(fmt.Errorf("Received unexpected Pcp code: %v", packet.Code))
+	} else {
+		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxyPair: %v", packet.Val))
+	}
+}
+
+func (server *serverState) handleStopProxyPair(packet *protocols.Packet) {
+	if desc, ok := packet.Val.(*StopProxyPair); ok {
+		server.ReplyCheck(packet, server.handler.StopProxyPair(desc))
+	} else {
+		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxyPair: %v", packet.Val))
 	}
 }
