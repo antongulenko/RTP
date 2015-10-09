@@ -7,6 +7,9 @@ import (
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/RTP/protocols/heartbeat"
+	"github.com/antongulenko/RTP/protocols/pcp"
+	"github.com/antongulenko/RTP/protocols/ping"
 	"github.com/antongulenko/RTP/proxies"
 )
 
@@ -28,15 +31,19 @@ func main() {
 	proxies.UdpProxyFlags()
 	pcp_addr := protocols.ParseServerFlags("0.0.0.0", 7778)
 
-	proxy, err := proxies.NewPcpProxy(pcp_addr)
+	proto, err := protocols.NewProtocol("PCP", pcp.Protocol, ping.Protocol, heartbeat.Protocol)
+	Checkerr(err)
+	server, err := protocols.NewServer(pcp_addr, proto)
+	Checkerr(err)
+	proxy, err := proxies.RegisterPcpProxy(server)
 	Checkerr(err)
 
 	go printPcpErrors(proxy)
 	proxy.ProxyStartedCallback = proxyStarted
 	proxy.ProxyStoppedCallback = proxyStopped
-	proxy.Start()
+	server.Start()
 
-	log.Println("Listening to PCP on " + pcp_addr)
+	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
 	WaitAndStopObservees(nil, []Observee{
 		proxy,

@@ -27,8 +27,6 @@ var (
 	running_average            = true
 	print_ctrl_events          = false
 
-	client_ip = "127.0.0.1"
-
 	use_amp        = false
 	amp_url        = "127.0.0.1:7779"
 	amp_media_file = "Sample.264"
@@ -81,10 +79,8 @@ func startClient() (rtp_port int) {
 func startStream(target_ip string, rtp_port int) {
 	if use_amp {
 		log.Println("Starting stream using AMP at", amp_url)
-		server := amp_url
-		client, err := amp.NewClient(client_ip)
+		client, err := amp.NewClientFor(amp_url)
 		Checkerr(err)
-		Checkerr(client.SetServer(server))
 		Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
 		observees = append(observees, CleanupObservee(func() {
 			Printerr(client.StopStream(target_ip, rtp_port))
@@ -128,7 +124,6 @@ func parseFlags() {
 	flag.BoolVar(&use_pcp, "pcp", use_pcp, "Use external PCP server to satisfy -proxy. Implies -proxy")
 	flag.StringVar(&pcp_url, "pcp_url", pcp_url, "The PCP server used for -pcp")
 
-	flag.StringVar(&client_ip, "client", client_ip, "The local IP used for AMP and PCP clients")
 	flag.StringVar(&rtp_ip, "rtp", rtp_ip, "The local IP used to receive RTP/RTCP traffic")
 	flag.IntVar(&start_rtp_port, "rtp_port", start_rtp_port, "The local port to receive RTP traffic")
 

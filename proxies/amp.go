@@ -12,6 +12,7 @@ import (
 	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
+	"github.com/antongulenko/RTP/protocols/amp_control"
 	"github.com/antongulenko/RTP/rtpClient"
 )
 
@@ -20,7 +21,7 @@ const (
 )
 
 type AmpProxy struct {
-	*amp.Server
+	*protocols.Server
 	sessions protocols.Sessions
 
 	rtspURL   *url.URL
@@ -45,7 +46,7 @@ type streamSession struct {
 // ampAddr: address to listen on for AMP requests
 // rtspURL: base URL used when sending RTSP requests to the backend media server
 // localProxyIP: address to receive RTP/RTCP packets from the media server
-func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (proxy *AmpProxy, err error) {
+func RegisterAmpProxy(server *protocols.Server, rtspURL, localProxyIP string) (*AmpProxy, error) {
 	u, err := url.Parse(rtspURL)
 	if err != nil {
 		return nil, err
@@ -59,16 +60,20 @@ func NewAmpProxy(local_addr, rtspURL, localProxyIP string) (proxy *AmpProxy, err
 		return nil, fmt.Errorf("Failed to resolve IP address %v: %v", localProxyIP, err)
 	}
 
-	proxy = &AmpProxy{
+	proxy := &AmpProxy{
 		rtspURL:   u,
 		proxyHost: ip.String(),
 		sessions:  make(protocols.Sessions),
+		Server:    server,
 	}
-	proxy.Server, err = amp.NewServer(local_addr, proxy)
-	if err != nil {
-		proxy = nil
+	if err := amp.RegisterServer(server, proxy); err != nil {
+		return nil, err
 	}
-	return
+	// TODO if second registration fails, the first registration still stays in the server...
+	if err := amp_control.RegisterServer(server, proxy); err != nil {
+		return nil, err
+	}
+	return proxy, nil
 }
 
 func (proxy *AmpProxy) StopServer() {
@@ -104,7 +109,7 @@ func (proxy *AmpProxy) emergencyStopSession(client string, err error) error {
 	}
 }
 
-func (proxy *AmpProxy) RedirectStream(desc *amp.RedirectStream) error {
+func (proxy *AmpProxy) RedirectStream(desc *amp_control.RedirectStream) error {
 	oldClient := desc.OldClient.Client()
 	newClient := desc.NewClient.Client()
 	sessionBase, err := proxy.sessions.ReKeySession(oldClient, newClient)
@@ -129,7 +134,7 @@ func (proxy *AmpProxy) RedirectStream(desc *amp.RedirectStream) error {
 	return nil
 }
 
-func (proxy *AmpProxy) PauseStream(val *amp.PauseStream) error {
+func (proxy *AmpProxy) PauseStream(val *amp_control.PauseStream) error {
 	sessionBase, ok := proxy.sessions[val.Client()]
 	if !ok {
 		return fmt.Errorf("Session not found exists for client %v", val.Client())
@@ -143,7 +148,7 @@ func (proxy *AmpProxy) PauseStream(val *amp.PauseStream) error {
 	return nil
 }
 
-func (proxy *AmpProxy) ResumeStream(val *amp.ResumeStream) error {
+func (proxy *AmpProxy) ResumeStream(val *amp_control.ResumeStream) error {
 	sessionBase, ok := proxy.sessions[val.Client()]
 	if !ok {
 		return fmt.Errorf("Session not found exists for client %v", val.Client())

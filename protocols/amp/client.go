@@ -3,43 +3,22 @@ package amp
 import "github.com/antongulenko/RTP/protocols"
 
 type Client struct {
-	protocols.ExtendedClient
-	*AmpProtocolImpl
+	protocols.Client
 }
 
-type CircuitBreaker interface {
-	protocols.CircuitBreaker
-	StartStream(clientHost string, port int, mediaFile string) error
-	StopStream(clientHost string, port int) error
-	RedirectStream(oldHost string, oldPort int, newHost string, newPort int) error
-}
-
-func NewClient(local_ip string) (client *Client, err error) {
-	client = new(Client)
-	client.ExtendedClient, err = protocols.NewExtendedClient(local_ip, client)
-	if err != nil {
-		client = nil
+func NewClient(client protocols.Client) (*Client, error) {
+	if err := client.Protocol().CheckIncludesFragment(Protocol.Name()); err != nil {
+		return nil, err
 	}
-	return
+	return &Client{client}, nil
 }
 
-type circuitBreaker struct {
-	protocols.CircuitBreaker
-	*Client
-}
-
-func NewCircuitBreaker(local_ip string, detector protocols.FaultDetector) (CircuitBreaker, error) {
-	baseClient, err := protocols.NewExtendedClient(local_ip, AmpProtocol)
+func NewClientFor(server_addr string) (*Client, error) {
+	client, err := protocols.NewMiniClientFor(server_addr, Protocol)
 	if err != nil {
 		return nil, err
 	}
-	breaker := protocols.NewCircuitBreaker(baseClient, detector)
-	return &circuitBreaker{
-		CircuitBreaker: breaker,
-		Client: &Client{
-			ExtendedClient: breaker,
-		},
-	}, nil
+	return &Client{client}, nil
 }
 
 func (client *Client) StartStream(clientHost string, port int, mediaFile string) error {
@@ -65,24 +44,6 @@ func (client *Client) StopStream(clientHost string, port int) error {
 		},
 	}
 	reply, err := client.SendRequest(CodeStopStream, val)
-	if err != nil {
-		return err
-	}
-	return client.CheckReply(reply)
-}
-
-func (client *Client) RedirectStream(oldHost string, oldPort int, newHost string, newPort int) error {
-	val := &RedirectStream{
-		OldClient: ClientDescription{
-			ReceiverHost: oldHost,
-			Port:         oldPort,
-		},
-		NewClient: ClientDescription{
-			ReceiverHost: newHost,
-			Port:         newPort,
-		},
-	}
-	reply, err := client.SendRequest(CodeRedirectStream, val)
 	if err != nil {
 		return err
 	}
