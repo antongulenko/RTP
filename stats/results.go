@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/antongulenko/RTP/helpers"
 )
 
 var (
@@ -22,7 +24,7 @@ type Results struct {
 
 	runningAverage  bool
 	startOnce       sync.Once
-	stopOnce        sync.Once
+	stopped         *helpers.OneshotCondition
 	incomingPackets chan packet
 
 	totalPackets uint
@@ -33,6 +35,7 @@ func NewResults() *Results {
 	return &Results{
 		packets:        list.New(),
 		startTimestamp: time.Now(),
+		stopped:        helpers.NewOneshotCondition(),
 	}
 }
 
@@ -49,7 +52,7 @@ func (stats *Results) addPackets() {
 }
 
 func (stats *Results) stop() {
-	stats.stopOnce.Do(func() {
+	stats.stopped.Enable(func() {
 		if stats.runningAverage {
 			close(stats.incomingPackets)
 		}
@@ -57,11 +60,13 @@ func (stats *Results) stop() {
 }
 
 func (stats *Results) add(t time.Time, bytes uint) {
-	stats.totalPackets++
-	stats.totalBytes += bytes
-	if stats.runningAverage {
-		stats.incomingPackets <- packet{t, bytes}
-	}
+	stats.stopped.IfNotEnabled(func() {
+		stats.totalPackets++
+		stats.totalBytes += bytes
+		if stats.runningAverage {
+			stats.incomingPackets <- packet{t, bytes}
+		}
+	})
 }
 
 func (stats *Results) Flush(secondsAge uint) {

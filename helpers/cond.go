@@ -53,6 +53,24 @@ func (cond *OneshotCondition) Wait() {
 	// because the condition cannot be undone.
 }
 
+func (cond *OneshotCondition) IfEnabled(execute func()) {
+	cond.cond.L.Lock()
+	defer cond.cond.L.Unlock()
+	if !cond.enabled {
+		return
+	}
+	execute()
+}
+
+func (cond *OneshotCondition) IfNotEnabled(execute func()) {
+	cond.cond.L.Lock()
+	defer cond.cond.L.Unlock()
+	if cond.enabled {
+		return
+	}
+	execute()
+}
+
 // ===== Implement Observee interface
 
 func (cond *OneshotCondition) Stop() {
