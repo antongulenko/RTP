@@ -19,6 +19,8 @@ var (
 )
 
 var (
+	num_clients = 1
+
 	close_int   = true
 	close_stdin = false
 
@@ -32,7 +34,7 @@ var (
 	amp_media_file = "Sample.264"
 
 	use_proxy     = false
-	proxy_port    = 9500
+	proxy_port    = 10000
 	pretend_proxy = false
 	use_pcp       = false
 	pcp_url       = "127.0.0.1:7778"
@@ -103,6 +105,10 @@ func stopObservees() {
 }
 
 func parseFlags() {
+	flag.IntVar(&num_clients, "num", num_clients,
+		"Number of parallel RTP streams to initiate.\n"+
+			"proxy_port and rtp_port will be used as starting point for allocating the required number of ports.")
+
 	flag.BoolVar(&close_stdin, "stdin", false, "Exit when stdin is closed")
 	flag.BoolVar(&close_int, "int", true, "Exit when INT signal is received")
 
@@ -132,27 +138,42 @@ func parseFlags() {
 	use_proxy = use_proxy || pretend_proxy
 }
 
+func startScenario() {
+	rtp_port := startClient()
+	start_rtp_port = rtp_port + 2
+	stream_ip := rtp_ip
+	if use_proxy {
+		stream_ip, rtp_port = startProxies(rtp_port)
+		proxy_port += 2
+	}
+	startStream(stream_ip, rtp_port)
+}
+
+func printStatistics() {
+	agg := make(stats.AggregatedStats, 0, 10)
+	for _, stats := range statistics {
+		agg.Aggregate(stats)
+	}
+	if running_average {
+		agg.Start()
+	}
+	observees = append(observees, LoopObservee(func() {
+		agg.Flush(3)
+		fmt.Printf("==============\n%s", agg.String())
+		time.Sleep(time.Second)
+	}))
+}
+
 func main() {
 	parseFlags()
 	ExitHook = stopObservees
 
-	rtp_port := startClient()
-	stream_ip := rtp_ip
-	if use_proxy {
-		stream_ip, rtp_port = startProxies(rtp_port)
+	for i := 0; i < num_clients; i++ {
+		startScenario()
 	}
-	startStream(stream_ip, rtp_port)
 
 	if print_stats {
-		if running_average {
-			for _, s := range statistics {
-				s.Start()
-			}
-		}
-		observees = append(observees, LoopObservee(func() {
-			stats.PrintStats(3, statistics)
-			time.Sleep(time.Second)
-		}))
+		printStatistics()
 	}
 
 	if close_stdin {

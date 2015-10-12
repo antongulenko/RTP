@@ -117,9 +117,15 @@ func WaitForAnyObservee(wg *sync.WaitGroup, observees []Observee) int {
 }
 
 func ReverseStopObservees(observees []Observee) {
+	var wg sync.WaitGroup
 	for i := len(observees) - 1; i >= 0; i-- {
-		observees[i].Stop()
+		wg.Add(1)
+		go func(observee Observee) {
+			defer wg.Done()
+			observee.Stop()
+		}(observees[i])
 	}
+	wg.Wait()
 }
 
 func WaitAndStopObservees(wg *sync.WaitGroup, observees []Observee) int {
