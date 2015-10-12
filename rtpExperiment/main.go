@@ -34,7 +34,7 @@ var (
 	amp_media_file = "Sample.264"
 
 	use_proxy     = false
-	proxy_port    = 9500
+	proxy_port    = 10000
 	pretend_proxy = false
 	use_pcp       = false
 	pcp_url       = "127.0.0.1:7778"
@@ -150,13 +150,16 @@ func startScenario() {
 }
 
 func printStatistics() {
+	agg := make(stats.AggregatedStats, 0, 10)
+	for _, stats := range statistics {
+		agg.Aggregate(stats)
+	}
 	if running_average {
-		for _, s := range statistics {
-			s.Start()
-		}
+		agg.Start()
 	}
 	observees = append(observees, LoopObservee(func() {
-		stats.PrintStats(3, statistics)
+		agg.Flush(3)
+		fmt.Printf("==============\n%s", agg.String())
 		time.Sleep(time.Second)
 	}))
 }
