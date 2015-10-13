@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultTimeout = time.Second * 1
+	DefaultTimeout = 1 * time.Second
 )
 
 type Client interface {
@@ -36,9 +36,11 @@ type client struct {
 	conn       Conn
 
 	protocol    Protocol
-	timeout     time.Duration
 	closed      *helpers.OneshotCondition
 	requestLock sync.Mutex
+
+	// The worst case delay for one request will be up to two times this.
+	timeout time.Duration
 }
 
 func NewClient(local_ip string, protocol Protocol) (Client, error) {
@@ -51,11 +53,11 @@ func NewClient(local_ip string, protocol Protocol) (Client, error) {
 		return nil, err
 	}
 	return &client{
-		timeout:   DefaultTimeout,
 		protocol:  protocol,
 		localAddr: conn.LocalAddr(),
 		conn:      conn,
 		closed:    helpers.NewOneshotCondition(),
+		timeout:   DefaultTimeout,
 	}, nil
 }
 
@@ -127,7 +129,7 @@ func (client *client) SendPacket(packet *Packet) error {
 	if err := client.checkServer(); err != nil {
 		return err
 	}
-	return client.conn.Send(packet, client.serverAddr)
+	return client.conn.UnreliableSend(packet, client.serverAddr)
 }
 
 func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
@@ -136,15 +138,8 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 	}
 	client.requestLock.Lock()
 	defer client.requestLock.Unlock()
-	if err = client.conn.Send(packet, client.serverAddr); err == nil {
-		if client.timeout != 0 {
-			var zeroTime time.Time
-			defer client.conn.SetDeadline(zeroTime)
-			if err = client.conn.SetDeadline(time.Now().Add(client.timeout)); err != nil {
-				return
-			}
-		}
-		reply, err = client.conn.Receive()
+	if err = client.conn.Send(packet, client.serverAddr, client.timeout); err == nil {
+		reply, err = client.conn.Receive(client.timeout)
 		if err != nil {
 			err = fmt.Errorf("Receiving %s reply from %s: %s", client.protocol.Name(), client.serverAddr, err)
 		}

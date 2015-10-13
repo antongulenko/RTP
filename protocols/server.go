@@ -7,12 +7,14 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/antongulenko/RTP/helpers"
 )
 
 const (
 	ErrorChanBuffer = 16
+	SendTimeout     = 1 * time.Second
 )
 
 type Server struct {
@@ -95,7 +97,7 @@ func (server *Server) listen() {
 		if server.Stopped {
 			return
 		}
-		packet, err := server.listenConn.Receive()
+		packet, err := server.listenConn.Receive(time.Duration(0))
 		if err != nil {
 			if server.Stopped {
 				return // error because of read from closed connection
@@ -108,7 +110,8 @@ func (server *Server) listen() {
 }
 
 func (server *Server) SendPacket(packet *Packet, target Addr) error {
-	return server.listenConn.Send(packet, target)
+	// TODO the timeout here should depend on the situation
+	return server.listenConn.Send(packet, target, SendTimeout)
 }
 
 func (server *Server) Reply(request *Packet, code Code, value interface{}) {

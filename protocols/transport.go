@@ -19,13 +19,12 @@ type TransportProvider interface {
 }
 
 type Conn interface {
-	Send(packet *Packet, addr Addr) error
+	Send(packet *Packet, addr Addr, timeout time.Duration) error
 	UnreliableSend(packet *Packet, addr Addr) error
-	Receive() (*Packet, error)
+	Receive(timeout time.Duration) (*Packet, error)
 
 	LocalAddr() Addr
 	Close() error
-	SetDeadline(t time.Time) error
 }
 
 type Addr interface {
@@ -34,6 +33,10 @@ type Addr interface {
 }
 
 // =============================== UDP Transport ===============================
+
+const (
+	DefaultRetries = 3
+)
 
 var (
 	udpTransport = &udpTransportProvider{"udp4", 512}
@@ -108,6 +111,7 @@ func (trans *udpTransportProvider) newConn(udp *net.UDPConn, protocol Protocol, 
 		udp:      udp,
 		protocol: protocol,
 		local:    udpAddr{trans, local},
+		retries:  DefaultRetries,
 	}, nil
 }
 
@@ -145,12 +149,24 @@ type udpConn struct {
 	udp      *net.UDPConn
 	local    udpAddr
 	protocol Protocol
+
+	retries int64
 }
 
-func (conn *udpConn) Send(packet *Packet, addr Addr) error {
+func (conn *udpConn) Send(packet *Packet, addr Addr, timeout time.Duration) error {
 	// TODO implement retry etc.
 	return conn.UnreliableSend(packet, addr)
 }
+
+/*
+func (conn *udpConn) trySend(b []byte, addr *udpAddr) (err error) {
+	if err = conn.timeout(conn.writeTimeout); err != nil {
+		return
+	}
+	_, err = conn.udp.WriteToUDP(b, addr.udp)
+	return
+}
+*/
 
 func (conn *udpConn) UnreliableSend(packet *Packet, addr Addr) error {
 	udpAddr, err := toUdpAddr(addr)
@@ -165,11 +181,17 @@ func (conn *udpConn) UnreliableSend(packet *Packet, addr Addr) error {
 	return err
 }
 
-func (conn *udpConn) Receive() (*Packet, error) {
+func (conn *udpConn) Receive(timeout time.Duration) (*Packet, error) {
+	if timeout > 0 {
+		defer conn.resetTimeout()
+		if err := conn.timeout(timeout); err != nil {
+			return nil, err
+		}
+	}
 	buf := make([]byte, conn.trans.bufferSize)
 	n, addr, err := conn.udp.ReadFromUDP(buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error receiving: %v", err)
 	}
 	// TODO check if not enough data received?
 	packet, err := Marshaller.UnmarshalPacket(buf[:n], conn.protocol)
@@ -188,6 +210,11 @@ func (conn *udpConn) Close() error {
 	return conn.udp.Close()
 }
 
-func (conn *udpConn) SetDeadline(t time.Time) error {
-	return conn.udp.SetDeadline(t)
+func (conn *udpConn) timeout(timeout time.Duration) error {
+	return conn.udp.SetDeadline(time.Now().Add(timeout))
+}
+
+func (conn *udpConn) resetTimeout() {
+	var zeroTime time.Time
+	_ = conn.udp.SetDeadline(zeroTime)
 }
