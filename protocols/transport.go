@@ -1,6 +1,7 @@
 package protocols
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"time"
@@ -144,62 +145,20 @@ func toUdpAddr(addr Addr) (*udpAddr, error) {
 
 // =============================== UDP Conn ===============================
 
+const (
+	AckData = "\0101*Ack*"
+)
+
+var (
+	AckBytes = []byte(AckData)
+)
+
 type udpConn struct {
 	trans    *udpTransportProvider
 	udp      *net.UDPConn
 	local    udpAddr
 	protocol Protocol
-
-	retries int64
-}
-
-func (conn *udpConn) Send(packet *Packet, addr Addr, timeout time.Duration) error {
-	// TODO implement retry etc.
-	return conn.UnreliableSend(packet, addr)
-}
-
-/*
-func (conn *udpConn) trySend(b []byte, addr *udpAddr) (err error) {
-	if err = conn.timeout(conn.writeTimeout); err != nil {
-		return
-	}
-	_, err = conn.udp.WriteToUDP(b, addr.udp)
-	return
-}
-*/
-
-func (conn *udpConn) UnreliableSend(packet *Packet, addr Addr) error {
-	udpAddr, err := toUdpAddr(addr)
-	if err != nil {
-		return err
-	}
-	b, err := Marshaller.MarshalPacket(packet)
-	if err != nil {
-		return err
-	}
-	_, err = conn.udp.WriteToUDP(b, udpAddr.udp)
-	return err
-}
-
-func (conn *udpConn) Receive(timeout time.Duration) (*Packet, error) {
-	if timeout > 0 {
-		defer conn.resetTimeout()
-		if err := conn.timeout(timeout); err != nil {
-			return nil, err
-		}
-	}
-	buf := make([]byte, conn.trans.bufferSize)
-	n, addr, err := conn.udp.ReadFromUDP(buf)
-	if err != nil {
-		return nil, fmt.Errorf("Error receiving: %v", err)
-	}
-	// TODO check if not enough data received?
-	packet, err := Marshaller.UnmarshalPacket(buf[:n], conn.protocol)
-	if err != nil {
-		return nil, err
-	}
-	packet.SourceAddr = &udpAddr{conn.trans, addr}
-	return packet, nil
+	retries  int
 }
 
 func (conn *udpConn) LocalAddr() Addr {
@@ -210,6 +169,76 @@ func (conn *udpConn) Close() error {
 	return conn.udp.Close()
 }
 
+func (conn *udpConn) Send(packet *Packet, addr Addr, timeout time.Duration) error {
+	udpAddr, b, err := conn.prepareSend(packet, addr)
+	if err != nil {
+		return err
+	}
+	receiveTimeout := timeout / time.Duration(conn.retries)
+	if receiveTimeout == 0 {
+		receiveTimeout = time.Duration(1)
+	}
+	defer conn.resetTimeout()
+
+	var ackErr error
+	for i := 0; i < conn.retries; i++ {
+		if err := conn.send(b, udpAddr.udp); err != nil {
+			return fmt.Errorf("Error sending to %v: %v", addr, err)
+		}
+		if err := conn.timeout(timeout); err != nil {
+			return err
+		}
+		ackErr = conn.receiveAck(udpAddr.udp)
+		if ackErr == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("Gave up sending to %v after %v retries. Error: %v", addr, conn.retries, ackErr)
+}
+
+func (conn *udpConn) UnreliableSend(packet *Packet, addr Addr) error {
+	udpAddr, b, err := conn.prepareSend(packet, addr)
+	if err != nil {
+		return err
+	}
+	return conn.send(b, udpAddr.udp)
+}
+
+func (conn *udpConn) prepareSend(packet *Packet, addr Addr) (udp *udpAddr, b []byte, err error) {
+	udp, err = toUdpAddr(addr)
+	if err != nil {
+		return
+	}
+	b, err = Marshaller.MarshalPacket(packet)
+	return
+}
+
+func (conn *udpConn) Receive(timeout time.Duration) (*Packet, error) {
+	if timeout > 0 {
+		defer conn.resetTimeout()
+		if err := conn.timeout(timeout); err != nil {
+			return nil, err
+		}
+	}
+	buf, addr, err := conn.receive()
+	if err != nil {
+		return nil, fmt.Errorf("Error receiving: %v", err)
+	}
+	if bytes.Equal(AckBytes, buf) {
+		return nil, fmt.Errorf("Received standalone Ack")
+	}
+	packet, err := Marshaller.UnmarshalPacket(buf, conn.protocol)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.sendAck(addr); err == nil {
+		packet.SourceAddr = &udpAddr{conn.trans, addr}
+		return packet, nil
+	} else {
+		return nil, err
+	}
+}
+
 func (conn *udpConn) timeout(timeout time.Duration) error {
 	return conn.udp.SetDeadline(time.Now().Add(timeout))
 }
@@ -217,4 +246,39 @@ func (conn *udpConn) timeout(timeout time.Duration) error {
 func (conn *udpConn) resetTimeout() {
 	var zeroTime time.Time
 	_ = conn.udp.SetDeadline(zeroTime)
+}
+
+func (conn *udpConn) send(b []byte, addr *net.UDPAddr) error {
+	_, err := conn.udp.WriteToUDP(b, addr)
+	// TODO check if everything was sent?
+	return err
+}
+
+func (conn *udpConn) receive() ([]byte, *net.UDPAddr, error) {
+	buf := make([]byte, conn.trans.bufferSize)
+	n, addr, err := conn.udp.ReadFromUDP(buf)
+	// TODO check if data did not fit in buffer?
+	return buf[:n], addr, err
+}
+
+func (conn *udpConn) sendAck(addr *net.UDPAddr) error {
+	//	return conn.send(AckBytes, addr)
+	return nil
+}
+
+func (conn *udpConn) receiveAck(expectedAddr *net.UDPAddr) error {
+	//	buf, addr, err := conn.receive()
+	//	if err != nil {
+	//		return fmt.Errorf("Error receiving Ack: %v", err)
+	//	}
+	//	if bytes.Equal(AckBytes, buf) {
+	//		if addr == expectedAddr {
+	//			return nil
+	//		} else {
+	//			return fmt.Errorf("Received Ack from %v instead of %v", addr, expectedAddr)
+	//		}
+	//	} else {
+	//		return fmt.Errorf("Received non-Ack packet from %v", addr)
+	//	}
+	return nil
 }
