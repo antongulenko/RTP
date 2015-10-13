@@ -18,8 +18,8 @@ import (
 
 var (
 	amp_servers      = []string{"127.0.0.1:7777"}
-	pcp_servers      = []string{"127.0.0.1:7778", "0.0.0.0:7776"}
-	heartbeat_server = "0.0.0.0:9122" // Random port
+	pcp_servers      = []string{"127.0.0.1:7778", "127.0.0.1:7776"}
+	heartbeat_server = "0.0.0.0:0" // Random port
 )
 
 func printServerErrors(servername string, server *protocols.Server) {

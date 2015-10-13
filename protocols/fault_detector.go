@@ -2,7 +2,6 @@ package protocols
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -26,7 +25,7 @@ type FaultDetector interface {
 	Error() error
 	Online() bool
 	ErrorDetected(err error)
-	ObservedServer() *net.UDPAddr
+	ObservedServer() Addr
 	AddCallback(callback FaultDetectorCallback, key interface{})
 }
 
@@ -37,7 +36,7 @@ type faultDetectorCallbackData struct {
 
 type observedServer struct {
 	protocol Protocol
-	addr     *net.UDPAddr
+	addr     Addr
 }
 
 type FaultDetectorBase struct {
@@ -47,7 +46,7 @@ type FaultDetectorBase struct {
 	Closed         *helpers.OneshotCondition
 }
 
-func NewFaultDetectorBase(observedProtocol Protocol, server *net.UDPAddr) *FaultDetectorBase {
+func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetectorBase {
 	return &FaultDetectorBase{
 		lastErr: stateUnknown,
 		observedServer: observedServer{
@@ -58,7 +57,7 @@ func NewFaultDetectorBase(observedProtocol Protocol, server *net.UDPAddr) *Fault
 	}
 }
 
-func (detector *FaultDetectorBase) ObservedServer() *net.UDPAddr {
+func (detector *FaultDetectorBase) ObservedServer() Addr {
 	return detector.observedServer.addr
 }
 

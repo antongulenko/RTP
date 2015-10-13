@@ -2,7 +2,6 @@ package heartbeat
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -12,7 +11,7 @@ import (
 // ======================= Receiving heartbeats =======================
 
 type HeartbeatServerHandler interface {
-	HeartbeatReceived(source *net.UDPAddr, beat *HeartbeatPacket)
+	HeartbeatReceived(source protocols.Addr, beat *HeartbeatPacket)
 }
 
 func RegisterServerHandler(server *protocols.Server, handler HeartbeatServerHandler) error {
@@ -36,7 +35,7 @@ func RegisterServerHandler(server *protocols.Server, handler HeartbeatServerHand
 type serverState struct {
 	*protocols.Server
 	heartbeatRunning  *helpers.OneshotCondition
-	heartbeatReceiver *net.UDPAddr
+	heartbeatReceiver protocols.Addr
 	heartbeatTimeout  time.Duration
 	heartbeatSeq      uint64
 }
@@ -62,10 +61,10 @@ func (server *serverState) handleConfigureHeartbeat(request *protocols.Packet) {
 }
 
 func (server *serverState) configureHeartbeat(receiver string, timeout time.Duration) error {
-	var addr *net.UDPAddr
+	var addr protocols.Addr
 	if receiver != "" {
 		var err error
-		addr, err = net.ResolveUDPAddr("udp4", receiver)
+		addr, err = protocols.Transport.Resolve(receiver)
 		if err != nil {
 			return fmt.Errorf("Failed to resolve heartbeat-receiver %s: %v", receiver, err)
 		}

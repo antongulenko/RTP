@@ -60,7 +60,11 @@ func NewBalancingPlugin(handler BalancingPluginHandler, make_detector FaultDetec
 }
 
 func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.FaultDetectorCallback) error {
-	serverAddr, localAddr, err := helpers.ResolveUdp(addr)
+	serverAddr, err := protocols.Transport.Resolve(addr)
+	if err != nil {
+		return err
+	}
+	localAddr, err := protocols.Transport.ResolveLocal(addr)
 	if err != nil {
 		return err
 	}
@@ -68,7 +72,7 @@ func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.
 	if err != nil {
 		return err
 	}
-	client, err := plugin.handler.NewClient(localAddr.IP.String(), detector)
+	client, err := plugin.handler.NewClient(localAddr.IP().String(), detector)
 	if err != nil {
 		_ = detector.Close()
 		return err

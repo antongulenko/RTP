@@ -2,7 +2,6 @@ package protocols
 
 import (
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -18,7 +17,7 @@ type Client interface {
 	Closed() bool
 
 	SetServer(server_addr string) error
-	Server() *net.UDPAddr
+	Server() Addr
 	SetTimeout(timeout time.Duration)
 	Protocol() Protocol
 	String() string
@@ -32,9 +31,9 @@ type Client interface {
 }
 
 type client struct {
-	serverAddr *net.UDPAddr
-	localAddr  *net.UDPAddr
-	conn       *net.UDPConn
+	serverAddr Addr
+	localAddr  Addr
+	conn       Conn
 
 	protocol    Protocol
 	timeout     time.Duration
@@ -43,34 +42,29 @@ type client struct {
 }
 
 func NewClient(local_ip string, protocol Protocol) (Client, error) {
-	localAddr, err := net.ResolveUDPAddr("udp4", net.JoinHostPort(local_ip, "0"))
+	localAddr, err := Transport.ResolveIP(local_ip)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP("udp4", localAddr)
+	conn, err := Transport.Listen(localAddr, protocol)
 	if err != nil {
 		return nil, err
-	}
-	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		_ = conn.Close()
-		return nil, fmt.Errorf("Failed to get *UDPAddr from UDPConn.LocalAddr()")
 	}
 	return &client{
 		timeout:   DefaultTimeout,
 		protocol:  protocol,
-		localAddr: localAddr,
+		localAddr: conn.LocalAddr(),
 		conn:      conn,
 		closed:    helpers.NewOneshotCondition(),
 	}, nil
 }
 
 func NewClientFor(server string, protocol Protocol) (Client, error) {
-	_, localAddr, err := helpers.ResolveUdp(server)
+	localAddr, err := Transport.ResolveLocal(server)
 	if err != nil {
 		return nil, err
 	}
-	client, err := NewClient(localAddr.IP.String(), protocol)
+	client, err := NewClient(localAddr.IP().String(), protocol)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +99,7 @@ func (client *client) Protocol() Protocol {
 	return client.protocol
 }
 
-func (client *client) Server() *net.UDPAddr {
+func (client *client) Server() Addr {
 	return client.serverAddr
 }
 
@@ -114,7 +108,7 @@ func (client *client) SetTimeout(timeout time.Duration) {
 }
 
 func (client *client) SetServer(server_addr string) error {
-	serverAddr, err := net.ResolveUDPAddr("udp4", server_addr)
+	serverAddr, err := Transport.Resolve(server_addr)
 	if err != nil {
 		return err
 	}
@@ -133,7 +127,7 @@ func (client *client) SendPacket(packet *Packet) error {
 	if err := client.checkServer(); err != nil {
 		return err
 	}
-	return packet.sendPacket(client.conn, client.serverAddr, client.protocol)
+	return client.conn.Send(packet, client.serverAddr)
 }
 
 func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
@@ -142,7 +136,7 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 	}
 	client.requestLock.Lock()
 	defer client.requestLock.Unlock()
-	if err = packet.sendPacket(client.conn, client.serverAddr, client.protocol); err == nil {
+	if err = client.conn.Send(packet, client.serverAddr); err == nil {
 		if client.timeout != 0 {
 			var zeroTime time.Time
 			defer client.conn.SetDeadline(zeroTime)
@@ -150,7 +144,7 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 				return
 			}
 		}
-		reply, err = receivePacket(client.conn, 0, client.protocol)
+		reply, err = client.conn.Receive()
 		if err != nil {
 			err = fmt.Errorf("Receiving %s reply from %s: %s", client.protocol.Name(), client.serverAddr, err)
 		}

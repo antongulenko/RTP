@@ -2,7 +2,6 @@ package balancer
 
 import (
 	"fmt"
-	"net"
 	"sort"
 	"sync"
 
@@ -10,8 +9,8 @@ import (
 )
 
 type BackendServer struct {
-	Addr           *net.UDPAddr
-	LocalAddr      *net.UDPAddr
+	Addr           protocols.Addr
+	LocalAddr      protocols.Addr
 	Client         protocols.CircuitBreaker
 	Sessions       map[*BalancingSession]bool
 	Plugin         *BalancingPlugin

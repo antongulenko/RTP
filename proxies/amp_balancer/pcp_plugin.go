@@ -43,7 +43,7 @@ func (handler *pcpBalancingHandler) NewSession(balancingSession *balancer.Balanc
 		return nil, err
 	}
 
-	proxyHost := client.Server().IP.String()
+	proxyHost := client.Server().IP().String()
 	// TODO the address for receiving traffic could be different from the protocol-API
 	// Check the address of the sending session plugin..?
 	resp, err := client.StartProxyPair(proxyHost, desc.ReceiverHost, desc.Port, desc.Port+1)
@@ -97,7 +97,7 @@ func (session *pcpBalancingSession) HandleServerFault() (*balancer.BackendServer
 		// TODO log errors that prevented a backup server from being used?
 		if err == nil {
 			var err error
-			proxyHost := pcpBackup.Server().IP.String()
+			proxyHost := pcpBackup.Server().IP().String()
 			// TODO The proxyHost could be different. See the comment above in NewSession.
 			resp, err = pcpBackup.StartProxyPair(proxyHost, session.receiverHost, session.receiverPort, session.receiverPort+1)
 			if err == nil {

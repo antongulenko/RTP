@@ -2,7 +2,6 @@ package heartbeat
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -52,7 +51,7 @@ func (server *serverStopper) StopServer() {
 	}
 }
 
-func (server *HeartbeatServer) HeartbeatReceived(source *net.UDPAddr, beat *HeartbeatPacket) {
+func (server *HeartbeatServer) HeartbeatReceived(source protocols.Addr, beat *HeartbeatPacket) {
 	received := time.Now()
 	addr := source.String()
 	if detector, ok := server.detectors[addr]; ok {
@@ -87,6 +86,7 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 		return nil, err
 	}
 	addr := client.Server().String()
+
 	if _, ok := server.detectors[addr]; ok {
 		_ = client.Close() // Drop error
 		return nil, fmt.Errorf("Server with address %v is already being observed.", addr)
