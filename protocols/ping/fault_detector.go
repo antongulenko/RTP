@@ -13,25 +13,24 @@ const (
 type FaultDetector struct {
 	*protocols.FaultDetectorBase
 	client *Client
+	server string
 }
 
-func NewFaultDetector(client protocols.Client) (*FaultDetector, error) {
+func NewFaultDetector(client protocols.Client, server string) (*FaultDetector, error) {
 	pingClient, err := NewClient(client)
 	if err != nil {
 		return nil, err
 	}
 	return &FaultDetector{
-		FaultDetectorBase: protocols.NewFaultDetectorBase(client.Protocol(), client.Server()),
+		FaultDetectorBase: protocols.NewFaultDetectorBase(client.Protocol(), server),
 		client:            pingClient,
+		server:            server,
 	}, nil
 }
 
 func DialNewFaultDetector(endpoint string) (*FaultDetector, error) {
-	client, err := protocols.NewClientFor(endpoint, MiniProtocol)
-	if err != nil {
-		return nil, err
-	}
-	return NewFaultDetector(client)
+	client := protocols.NewClient(MiniProtocol)
+	return NewFaultDetector(client, endpoint)
 }
 
 func (detector *FaultDetector) Start() {
@@ -46,5 +45,18 @@ func (detector *FaultDetector) Close() (err error) {
 }
 
 func (detector *FaultDetector) Check() {
-	detector.PerformCheck(detector.client.Ping)
+	detector.PerformCheck(detector.doPing)
+}
+
+func (detector *FaultDetector) doPing() error {
+	if detector.client.Server() == nil {
+		err := detector.client.SetServer(detector.server)
+		if err != nil {
+			return err
+		}
+	}
+	err := detector.client.Ping()
+	// Next ping with fresh connection
+	detector.client.ResetConnection()
+	return err
 }

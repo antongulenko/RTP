@@ -21,6 +21,7 @@ type ProtocolFragment interface {
 type Protocol interface {
 	Name() string
 	CheckIncludesFragment(fragmentName string) error
+	Transport() TransportProvider
 
 	decodeValue(code Code, decoder *gob.Decoder) (interface{}, error)
 	instantiateServer(server *Server) (*serverProtocolInstance, error)
@@ -35,13 +36,19 @@ type protocol struct {
 	name      string
 	fragments []ProtocolFragment
 	decoders  map[Code]decoderDescription
+	transport TransportProvider
 }
 
 func NewProtocol(name string, fragments ...ProtocolFragment) (*protocol, error) {
+	return NewProtocolTransport(name, DefaultTransport, fragments...)
+}
+
+func NewProtocolTransport(name string, transport TransportProvider, fragments ...ProtocolFragment) (*protocol, error) {
 	decoders := make(map[Code]decoderDescription)
 	proto := &protocol{
-		name:     name,
-		decoders: decoders,
+		name:      name,
+		decoders:  decoders,
+		transport: transport,
 	}
 	fragments = append(fragments, defaultProtocol)
 	proto.fragments = fragments
@@ -62,6 +69,10 @@ func NewMiniProtocol(fragment ProtocolFragment) *protocol {
 		panic(fmt.Errorf("Creating single-fragment protocol should never fail (err: %v)", err))
 	}
 	return proto
+}
+
+func (proto *protocol) Transport() TransportProvider {
+	return proto.transport
 }
 
 func (proto *protocol) CheckIncludesFragment(fragmentName string) error {
@@ -87,7 +98,7 @@ func (proto *protocol) decodeValue(code Code, decoder *gob.Decoder) (interface{}
 
 // =================== Extensions for Server
 
-type ServerRequestHandler func(packet *Packet)
+type ServerRequestHandler func(packet *Packet) (reply *Packet)
 type ServerHandlerMap map[Code]ServerRequestHandler
 type ServerStopper func()
 
@@ -145,13 +156,14 @@ func (inst *serverProtocolInstance) registerStopper(stopper ServerStopper) {
 	inst.stoppers = append(inst.stoppers, stopper)
 }
 
-func (inst *serverProtocolInstance) HandleServerPacket(packet *Packet) {
+func (inst *serverProtocolInstance) HandleServerPacket(packet *Packet) *Packet {
 	code := packet.Code
 	handler, ok := inst.handlers[code]
 	if !ok {
 		inst.server.LogError(fmt.Errorf("Packet code %v not handled %v", code, inst.Name()))
+		return nil
 	} else {
-		handler(packet)
+		return handler(packet)
 	}
 }
 
@@ -194,9 +206,11 @@ func (frag *defaultProtocolFragment) ServerHandlers(server *Server) ServerHandle
 		CodeError: state.handleError,
 	}
 }
-func (state *defaultServerState) handleOK(packet *Packet) {
+func (state *defaultServerState) handleOK(packet *Packet) *Packet {
 	state.LogError(fmt.Errorf("Received standalone OK message from %v", packet.SourceAddr))
+	return nil
 }
-func (state *defaultServerState) handleError(packet *Packet) {
+func (state *defaultServerState) handleError(packet *Packet) *Packet {
 	state.LogError(fmt.Errorf("Received standalone Error message from %v: %v", packet.SourceAddr, packet.Val))
+	return nil
 }

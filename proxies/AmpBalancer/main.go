@@ -19,7 +19,7 @@ import (
 var (
 	amp_servers      = []string{"127.0.0.1:7777"}
 	pcp_servers      = []string{"127.0.0.1:7778", "127.0.0.1:7776"}
-	heartbeat_server = "0.0.0.0:0" // Random port
+	heartbeat_server = "127.0.0.1:0" // Random port
 )
 
 func printServerErrors(servername string, server *protocols.Server) {
@@ -75,7 +75,7 @@ func main() {
 		heartbeatServer, err = heartbeat.NewHeartbeatServer(heartbeat_server)
 		Checkerr(err)
 		go printServerErrors("Heartbeat", heartbeatServer.Server)
-		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr)
+		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr())
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
 			return heartbeatServer.ObserveServer(endpoint, heartbeat_frequency, heartbeat_timeout)
 		}
@@ -91,17 +91,6 @@ func main() {
 		}
 	}
 
-	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
-	for _, amp := range amp_servers {
-		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
-		Checkerr(err)
-	}
-	pcpPlugin := amp_balancer.NewPcpBalancingPlugin(detector_factory)
-	for _, pcp := range pcp_servers {
-		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
-		Checkerr(err)
-	}
-
 	protocol, err := protocols.NewProtocol("AMP", amp.Protocol, ping.Protocol, heartbeat.Protocol)
 	Checkerr(err)
 	baseServer, err := protocols.NewServer(amp_addr, protocol)
@@ -109,8 +98,20 @@ func main() {
 	server, err := amp_balancer.RegisterPluginServer(baseServer)
 	Checkerr(err)
 	observees = append(observees, server)
+
+	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
 	server.AddPlugin(ampPlugin)
+	pcpPlugin := amp_balancer.NewPcpBalancingPlugin(detector_factory)
 	server.AddPlugin(pcpPlugin)
+
+	for _, amp := range amp_servers {
+		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
+		Checkerr(err)
+	}
+	for _, pcp := range pcp_servers {
+		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
+		Checkerr(err)
+	}
 
 	go printServerErrors("Server", server.Server)
 	server.SessionStartedCallback = printSessionStarted

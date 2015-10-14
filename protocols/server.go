@@ -18,15 +18,14 @@ const (
 )
 
 type Server struct {
-	stopped    *helpers.OneshotCondition
-	listenConn Conn
-	errors     chan error
+	stopped  *helpers.OneshotCondition
+	listener Listener
+	errors   chan error
 
 	protocol *serverProtocolInstance
 
-	Wg        *sync.WaitGroup
-	Stopped   bool
-	LocalAddr Addr
+	Wg      *sync.WaitGroup
+	Stopped bool
 }
 
 func NewServer(addr_string string, protocol Protocol) (*Server, error) {
@@ -40,21 +39,24 @@ func NewServer(addr_string string, protocol Protocol) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	addr, err := Transport.Resolve(addr_string)
+	addr, err := protocol.Transport().Resolve(addr_string)
 	if err != nil {
 		return nil, err
 	}
-	listenConn, err := Transport.Listen(addr, protocol)
+	listener, err := protocol.Transport().Listen(addr, protocol)
 	if err != nil {
 		return nil, err
 	}
-	server.listenConn = listenConn
-	server.LocalAddr = listenConn.LocalAddr()
+	server.listener = listener
 	return server, nil
 }
 
+func (server *Server) LocalAddr() Addr {
+	return server.listener.LocalAddr()
+}
+
 func (server *Server) String() string {
-	return fmt.Sprintf("%v on %v", server.protocol.Name(), server.LocalAddr)
+	return fmt.Sprintf("%v on %v", server.protocol.Name(), server.LocalAddr())
 }
 
 func (server *Server) Protocol() Protocol {
@@ -77,7 +79,9 @@ func (server *Server) Observe(wg *sync.WaitGroup) <-chan interface{} {
 func (server *Server) Stop() {
 	server.stopped.Enable(func() {
 		server.Stopped = true
-		server.listenConn.Close()
+		if err := server.listener.Close(); err != nil {
+			server.LogError(fmt.Errorf("Error closing listener: %v", err))
+		}
 		server.protocol.stopServer()
 		server.Wg.Wait()
 	})
@@ -97,45 +101,48 @@ func (server *Server) listen() {
 		if server.Stopped {
 			return
 		}
-		packet, err := server.listenConn.Receive(time.Duration(0))
+		conn, err := server.listener.Accept()
 		if err != nil {
 			if server.Stopped {
-				return // error because of read from closed connection
+				return // error because listener was closed
 			}
 			server.LogError(err)
 		} else {
-			server.protocol.HandleServerPacket(packet)
+			// TODO separate goroutine for this?
+			packet, err := conn.Receive(time.Duration(0))
+			if err != nil {
+				server.LogError(fmt.Errorf("Error receiving on accepted connection: %v", err))
+				continue
+			}
+			reply := server.protocol.HandleServerPacket(packet)
+			if reply != nil {
+				err := conn.Send(reply, SendTimeout) // TODO arbitrary timeout...
+				if err != nil {
+					server.LogError(fmt.Errorf("Failed to send reply: %v", err))
+				}
+			}
 		}
 	}
 }
 
-func (server *Server) SendPacket(packet *Packet, target Addr) error {
-	// TODO the timeout here should depend on the situation
-	return server.listenConn.Send(packet, target, SendTimeout)
+func (server *Server) Reply(code Code, value interface{}) *Packet {
+	return &Packet{Code: code, Val: value}
 }
 
-func (server *Server) Reply(request *Packet, code Code, value interface{}) {
-	packet := Packet{Code: code, Val: value}
-	err := server.SendPacket(&packet, request.SourceAddr)
-	if err != nil {
-		server.LogError(fmt.Errorf("Failed to send reply: %v", err))
-	}
-}
-
-func (server *Server) ReplyCheck(request *Packet, err error) {
+func (server *Server) ReplyCheck(err error) *Packet {
 	if err == nil {
-		server.ReplyOK(request)
+		return server.ReplyOK()
 	} else {
-		server.ReplyError(request, err)
+		return server.ReplyError(err)
 	}
 }
 
-func (server *Server) ReplyOK(request *Packet) {
-	server.Reply(request, CodeOK, "")
+func (server *Server) ReplyOK() *Packet {
+	return server.Reply(CodeOK, "")
 }
 
-func (server *Server) ReplyError(request *Packet, err error) {
-	server.Reply(request, CodeError, err.Error())
+func (server *Server) ReplyError(err error) *Packet {
+	return server.Reply(CodeError, err.Error())
 }
 
 func (server *Server) LogError(err error) {

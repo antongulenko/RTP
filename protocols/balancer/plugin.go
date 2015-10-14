@@ -24,7 +24,7 @@ type BalancingPlugin struct {
 }
 
 type BalancingPluginHandler interface {
-	NewClient(localAddr string, detector protocols.FaultDetector) (protocols.CircuitBreaker, error)
+	NewClient(detector protocols.FaultDetector) (protocols.CircuitBreaker, error)
 	Protocol() protocols.Protocol
 
 	// Create and fully initialize new session. The param data is passed from
@@ -60,35 +60,31 @@ func NewBalancingPlugin(handler BalancingPluginHandler, make_detector FaultDetec
 }
 
 func (plugin *BalancingPlugin) AddBackendServer(addr string, callback protocols.FaultDetectorCallback) error {
-	serverAddr, err := protocols.Transport.Resolve(addr)
+	plugin.assertStarted()
+	serverAddr, err := plugin.Server.Protocol().Transport().Resolve(addr)
 	if err != nil {
-		return err
-	}
-	localAddr, err := protocols.Transport.ResolveLocal(addr)
-	if err != nil {
-		return err
+		return fmt.Errorf("Error resolving backend server: %v", err)
 	}
 	detector, err := plugin.make_detector(addr)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error making detector: %v", err)
 	}
-	client, err := plugin.handler.NewClient(localAddr.IP().String(), detector)
+	client, err := plugin.handler.NewClient(detector)
 	if err != nil {
 		_ = detector.Close()
-		return err
+		return fmt.Errorf("Error creating client: %v", err)
 	}
 	err = client.SetServer(serverAddr.String())
 	if err != nil {
 		_ = detector.Close()
 		_ = client.Close()
-		return err
+		return fmt.Errorf("Error configuring client: %v", err)
 	}
 	server := &BackendServer{
-		Addr:      serverAddr,
-		LocalAddr: localAddr,
-		Client:    client,
-		Sessions:  make(map[*BalancingSession]bool),
-		Plugin:    plugin,
+		Addr:     serverAddr,
+		Client:   client,
+		Sessions: make(map[*BalancingSession]bool),
+		Plugin:   plugin,
 	}
 	plugin.BackendServers = append(plugin.BackendServers, server)
 	sort.Sort(plugin.BackendServers)

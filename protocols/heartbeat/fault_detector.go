@@ -2,6 +2,7 @@ package heartbeat
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -10,9 +11,13 @@ import (
 
 // ======================= Server for receiving heartbeats =======================
 
+var (
+	tokenRand = rand.New(rand.NewSource(time.Now().Unix()))
+)
+
 type HeartbeatServer struct {
 	*protocols.Server
-	detectors map[string]*HeartbeatFaultDetector
+	detectors map[int64]*HeartbeatFaultDetector
 }
 
 type serverStopper struct {
@@ -22,7 +27,7 @@ type serverStopper struct {
 
 func NewHeartbeatServer(local_addr string) (*HeartbeatServer, error) {
 	heartbeatServer := &HeartbeatServer{
-		detectors: make(map[string]*HeartbeatFaultDetector),
+		detectors: make(map[int64]*HeartbeatFaultDetector),
 	}
 	if server, err := protocols.NewServer(local_addr, &serverStopper{MiniProtocol, heartbeatServer}); err == nil {
 		heartbeatServer.Server = server
@@ -51,13 +56,13 @@ func (server *serverStopper) StopServer() {
 	}
 }
 
-func (server *HeartbeatServer) HeartbeatReceived(source protocols.Addr, beat *HeartbeatPacket) {
+func (server *HeartbeatServer) HeartbeatReceived(beat *HeartbeatPacket) {
 	received := time.Now()
-	addr := source.String()
-	if detector, ok := server.detectors[addr]; ok {
+	token := beat.Token
+	if detector, ok := server.detectors[token]; ok {
 		detector.heartbeatReceived(received, beat)
 	} else {
-		server.LogError(fmt.Errorf("Unexpected heartbeat (seq %v) from %v", beat.Seq, addr))
+		server.LogError(fmt.Errorf("Unexpected heartbeat (seq %v) from %v", beat.Seq, beat.Source))
 	}
 }
 
@@ -71,6 +76,7 @@ type HeartbeatFaultDetector struct {
 	acceptableTimeout  time.Duration
 	heartbeatFrequency time.Duration
 
+	token                 int64
 	seq                   uint64
 	lastHeartbeatSent     time.Time
 	lastHeartbeatReceived time.Time
@@ -85,22 +91,23 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 	if err != nil {
 		return nil, err
 	}
-	addr := client.Server().String()
-
-	if _, ok := server.detectors[addr]; ok {
-		_ = client.Close() // Drop error
-		return nil, fmt.Errorf("Server with address %v is already being observed.", addr)
+	var token int64
+	for {
+		token = tokenRand.Int63()
+		if _, ok := server.detectors[token]; !ok && token != 0 {
+			break
+		}
 	}
-
 	detector := &HeartbeatFaultDetector{
-		FaultDetectorBase:     protocols.NewFaultDetectorBase(server.Protocol(), client.Server()),
-		client:                client,
-		acceptableTimeout:     acceptableTimeout,
-		heartbeatFrequency:    heartbeatFrequency,
-		server:                server,
+		FaultDetectorBase:  protocols.NewFaultDetectorBase(server.Protocol(), endpoint),
+		client:             client,
+		acceptableTimeout:  acceptableTimeout,
+		heartbeatFrequency: heartbeatFrequency,
+		server:             server,
+		token:              token,
 		lastHeartbeatReceived: time.Now(),
 	}
-	server.detectors[addr] = detector
+	server.detectors[token] = detector
 	return detector, nil
 }
 
@@ -137,7 +144,10 @@ func (detector *HeartbeatFaultDetector) Check() {
 }
 
 func (detector *HeartbeatFaultDetector) configureObservedServer() {
-	detector.configError = detector.client.ConfigureHeartbeat(detector.server.Server, detector.heartbeatFrequency)
+	detector.configError = detector.client.ConfigureHeartbeat(detector.server.Server, detector.token, detector.heartbeatFrequency)
+	if detector.configError != nil {
+		detector.client.ResetConnection()
+	}
 	detector.seq = 0
 }
 
@@ -156,9 +166,11 @@ func (detector *HeartbeatFaultDetector) Start() {
 func (detector *HeartbeatFaultDetector) Close() error {
 	var err helpers.MultiError
 	detector.Closed.Enable(func() {
-		delete(detector.server.detectors, detector.ObservedServer().String())
+		delete(detector.server.detectors, detector.token)
 		// Notify remote server to stop sending heartbeats.
-		err.Add(detector.client.ConfigureHeartbeat(detector.server.Server, 0))
+		if detector.Online() {
+			err.Add(detector.client.ConfigureHeartbeat(detector.server.Server, 0, 0))
+		}
 		err.Add(detector.client.Close())
 	})
 	return err.NilOrError()

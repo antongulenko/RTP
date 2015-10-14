@@ -43,39 +43,39 @@ func (server *serverState) stopServer() {
 	server.handler.StopServer()
 }
 
-func (server *serverState) handleStartProxy(packet *protocols.Packet) {
+func (server *serverState) handleStartProxy(packet *protocols.Packet) *protocols.Packet {
 	if desc, ok := packet.Val.(*StartProxy); ok {
-		server.ReplyCheck(packet, server.handler.StartProxy(desc))
+		return server.ReplyCheck(server.handler.StartProxy(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxy: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for Pcp StartProxy: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handleStopProxy(packet *protocols.Packet) {
+func (server *serverState) handleStopProxy(packet *protocols.Packet) *protocols.Packet {
 	if desc, ok := packet.Val.(*StopProxy); ok {
-		server.ReplyCheck(packet, server.handler.StopProxy(desc))
+		return server.ReplyCheck(server.handler.StopProxy(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxy: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for Pcp StopProxy: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handleStartProxyPair(packet *protocols.Packet) {
+func (server *serverState) handleStartProxyPair(packet *protocols.Packet) *protocols.Packet {
 	if desc, ok := packet.Val.(*StartProxyPair); ok {
 		reply, err := server.handler.StartProxyPair(desc)
 		if err == nil {
-			server.Reply(packet, codeStartProxyPairResponse, reply)
+			return server.Reply(codeStartProxyPairResponse, reply)
 		} else {
-			server.ReplyError(packet, err)
+			return server.ReplyError(err)
 		}
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StartProxyPair: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for Pcp StartProxyPair: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handleStopProxyPair(packet *protocols.Packet) {
+func (server *serverState) handleStopProxyPair(packet *protocols.Packet) *protocols.Packet {
 	if desc, ok := packet.Val.(*StopProxyPair); ok {
-		server.ReplyCheck(packet, server.handler.StopProxyPair(desc))
+		return server.ReplyCheck(server.handler.StopProxyPair(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for Pcp StopProxyPair: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for Pcp StopProxyPair: %v", packet.Val))
 	}
 }
