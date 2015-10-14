@@ -2,7 +2,6 @@ package protocols
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/antongulenko/RTP/helpers"
@@ -63,7 +62,7 @@ func (breaker *circuitBreaker) SetServer(server_addr string) error {
 	return nil
 }
 
-func (breaker *circuitBreaker) Server() *net.UDPAddr {
+func (breaker *circuitBreaker) Server() Addr {
 	return breaker.client.Server()
 }
 

@@ -17,17 +17,17 @@ const (
 
 type Server struct {
 	stopped    *helpers.OneshotCondition
-	listenConn *net.UDPConn
+	listenConn Conn
 	errors     chan error
 
 	protocol *serverProtocolInstance
 
 	Wg        *sync.WaitGroup
 	Stopped   bool
-	LocalAddr *net.UDPAddr
+	LocalAddr Addr
 }
 
-func NewServer(local_addr string, protocol Protocol) (*Server, error) {
+func NewServer(addr_string string, protocol Protocol) (*Server, error) {
 	server := &Server{
 		Wg:      new(sync.WaitGroup),
 		errors:  make(chan error, ErrorChanBuffer),
@@ -38,21 +38,16 @@ func NewServer(local_addr string, protocol Protocol) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	udpAddr, err := net.ResolveUDPAddr("udp4", local_addr)
+	addr, err := Transport.Resolve(addr_string)
 	if err != nil {
 		return nil, err
 	}
-	listenConn, err := net.ListenUDP("udp4", udpAddr)
+	listenConn, err := Transport.Listen(addr, protocol)
 	if err != nil {
 		return nil, err
 	}
 	server.listenConn = listenConn
-	localUdpAddr, ok := listenConn.LocalAddr().(*net.UDPAddr)
-	server.LocalAddr = localUdpAddr
-	if !ok {
-		_ = listenConn.Close()
-		return nil, fmt.Errorf("Failed to convert to *net.UdpAddr: %v", listenConn.LocalAddr())
-	}
+	server.LocalAddr = listenConn.LocalAddr()
 	return server, nil
 }
 
@@ -100,7 +95,7 @@ func (server *Server) listen() {
 		if server.Stopped {
 			return
 		}
-		packet, err := receivePacket(server.listenConn, 0, server.protocol)
+		packet, err := server.listenConn.Receive()
 		if err != nil {
 			if server.Stopped {
 				return // error because of read from closed connection
@@ -112,8 +107,8 @@ func (server *Server) listen() {
 	}
 }
 
-func (server *Server) SendPacket(packet *Packet, target *net.UDPAddr) error {
-	return packet.sendPacket(server.listenConn, target, server.protocol)
+func (server *Server) SendPacket(packet *Packet, target Addr) error {
+	return server.listenConn.Send(packet, target)
 }
 
 func (server *Server) Reply(request *Packet, code Code, value interface{}) {

@@ -9,9 +9,6 @@ const (
 	CodeOK = iota
 	CodeError
 )
-const (
-	DefaultBufferSize = 512
-)
 
 type Decoder func(decoder *gob.Decoder) (interface{}, error)
 type DecoderMap map[Code]Decoder
@@ -25,7 +22,6 @@ type Protocol interface {
 	Name() string
 	CheckIncludesFragment(fragmentName string) error
 
-	defaultBufferSize() uint
 	decodeValue(code Code, decoder *gob.Decoder) (interface{}, error)
 	instantiateServer(server *Server) (*serverProtocolInstance, error)
 }
@@ -36,18 +32,16 @@ type decoderDescription struct {
 }
 
 type protocol struct {
-	bufferSize uint
-	name       string
-	fragments  []ProtocolFragment
-	decoders   map[Code]decoderDescription
+	name      string
+	fragments []ProtocolFragment
+	decoders  map[Code]decoderDescription
 }
 
 func NewProtocol(name string, fragments ...ProtocolFragment) (*protocol, error) {
 	decoders := make(map[Code]decoderDescription)
 	proto := &protocol{
-		bufferSize: DefaultBufferSize,
-		name:       name,
-		decoders:   decoders,
+		name:     name,
+		decoders: decoders,
 	}
 	fragments = append(fragments, defaultProtocol)
 	proto.fragments = fragments
@@ -81,10 +75,6 @@ func (proto *protocol) CheckIncludesFragment(fragmentName string) error {
 
 func (proto *protocol) Name() string {
 	return proto.name
-}
-
-func (proto *protocol) defaultBufferSize() uint {
-	return proto.bufferSize
 }
 
 func (proto *protocol) decodeValue(code Code, decoder *gob.Decoder) (interface{}, error) {
