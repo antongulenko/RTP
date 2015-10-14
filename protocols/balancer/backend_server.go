@@ -10,7 +10,6 @@ import (
 
 type BackendServer struct {
 	Addr           protocols.Addr
-	LocalAddr      protocols.Addr
 	Client         protocols.CircuitBreaker
 	Sessions       map[*BalancingSession]bool
 	Plugin         *BalancingPlugin

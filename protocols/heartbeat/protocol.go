@@ -21,11 +21,14 @@ const (
 )
 
 type HeartbeatPacket struct {
+	Token    int64
+	Source   string
 	TimeSent time.Time
 	Seq      uint64
 }
 
 type ConfigureHeartbeatPacket struct {
+	Token        int64
 	TargetServer string
 	Timeout      time.Duration
 }
@@ -85,11 +88,15 @@ func NewClientFor(server_addr string) (*Client, error) {
 	return &Client{client}, nil
 }
 
-func (client *Client) ConfigureHeartbeat(receiver *protocols.Server, timeout time.Duration) error {
+func (client *Client) ConfigureHeartbeat(receiver *protocols.Server, token int64, timeout time.Duration) error {
 	packet := ConfigureHeartbeatPacket{
-		TargetServer: receiver.LocalAddr.String(),
+		Token:        token,
+		TargetServer: receiver.LocalAddr().String(),
 		Timeout:      timeout,
 	}
-	// Do not wait for a reply.
-	return client.Send(codeConfigureHeartbeat, packet)
+	reply, err := client.SendRequest(codeConfigureHeartbeat, packet)
+	if err != nil {
+		return err
+	}
+	return client.CheckReply(reply)
 }

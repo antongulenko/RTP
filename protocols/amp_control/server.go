@@ -41,29 +41,29 @@ func (server *serverState) stopServer() {
 	server.handler.StopServer()
 }
 
-func (server *serverState) handleRedirectStream(packet *protocols.Packet) {
+func (server *serverState) handleRedirectStream(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if desc, ok := val.(*RedirectStream); ok {
-		server.ReplyCheck(packet, server.handler.RedirectStream(desc))
+		return server.ReplyCheck(server.handler.RedirectStream(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for AMPcontrol RedirectStream: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for AMPcontrol RedirectStream: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handlePauseStream(packet *protocols.Packet) {
+func (server *serverState) handlePauseStream(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if desc, ok := val.(*PauseStream); ok {
-		server.ReplyCheck(packet, server.handler.PauseStream(desc))
+		return server.ReplyCheck(server.handler.PauseStream(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for AMPcontrol PauseStream: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for AMPcontrol PauseStream: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handleResumeStream(packet *protocols.Packet) {
+func (server *serverState) handleResumeStream(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if desc, ok := val.(*ResumeStream); ok {
-		server.ReplyCheck(packet, server.handler.ResumeStream(desc))
+		return server.ReplyCheck(server.handler.ResumeStream(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for AMPcontrol ResumeStream: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for AMPcontrol ResumeStream: %v", packet.Val))
 	}
 }

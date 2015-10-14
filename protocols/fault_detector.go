@@ -25,7 +25,7 @@ type FaultDetector interface {
 	Error() error
 	Online() bool
 	ErrorDetected(err error)
-	ObservedServer() Addr
+	ObservedServer() string
 	AddCallback(callback FaultDetectorCallback, key interface{})
 }
 
@@ -36,7 +36,7 @@ type faultDetectorCallbackData struct {
 
 type observedServer struct {
 	protocol Protocol
-	addr     Addr
+	addr     string
 }
 
 type FaultDetectorBase struct {
@@ -46,7 +46,7 @@ type FaultDetectorBase struct {
 	Closed         *helpers.OneshotCondition
 }
 
-func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetectorBase {
+func NewFaultDetectorBase(observedProtocol Protocol, server string) *FaultDetectorBase {
 	return &FaultDetectorBase{
 		lastErr: stateUnknown,
 		observedServer: observedServer{
@@ -57,7 +57,7 @@ func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetector
 	}
 }
 
-func (detector *FaultDetectorBase) ObservedServer() Addr {
+func (detector *FaultDetectorBase) ObservedServer() string {
 	return detector.observedServer.addr
 }
 
@@ -76,11 +76,8 @@ func (detector *FaultDetectorBase) Online() bool {
 func (detector *FaultDetectorBase) Error() (err error) {
 	lastErr := detector.lastErr
 	if lastErr != nil {
-		var server = ""
-		if detector.observedServer.addr != nil {
-			server = " on " + detector.observedServer.addr.String()
-		}
-		err = fmt.Errorf("%v%s is currently offline: %v", detector.observedServer.protocol.Name(), server, lastErr)
+		err = fmt.Errorf("%v on %s is currently offline: %v",
+			detector.observedServer.protocol.Name(), detector.observedServer.addr, lastErr)
 	}
 	return
 }

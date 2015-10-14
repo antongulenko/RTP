@@ -39,20 +39,20 @@ func (server *serverState) stopServer() {
 	server.handler.StopServer()
 }
 
-func (server *serverState) handleStartStream(packet *protocols.Packet) {
+func (server *serverState) handleStartStream(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if desc, ok := val.(*StartStream); ok {
-		server.ReplyCheck(packet, server.handler.StartStream(desc))
+		return server.ReplyCheck(server.handler.StartStream(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for AMP StartStream: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for AMP StartStream: %v", packet.Val))
 	}
 }
 
-func (server *serverState) handleStopStream(packet *protocols.Packet) {
+func (server *serverState) handleStopStream(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if desc, ok := val.(*StopStream); ok {
-		server.ReplyCheck(packet, server.handler.StopStream(desc))
+		return server.ReplyCheck(server.handler.StopStream(desc))
 	} else {
-		server.ReplyError(packet, fmt.Errorf("Illegal value for AMP StopStream: %v", packet.Val))
+		return server.ReplyError(fmt.Errorf("Illegal value for AMP StopStream: %v", packet.Val))
 	}
 }

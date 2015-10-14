@@ -24,11 +24,8 @@ type circuitBreaker struct {
 	client Client // Backend client for the actual operations
 }
 
-func NewCircuitBreakerOn(localAddr string, protocol Protocol, detector FaultDetector) (CircuitBreaker, error) {
-	client, err := NewClient(localAddr, protocol)
-	if err != nil {
-		return nil, err
-	}
+func NewCircuitBreakerOn(protocol Protocol, detector FaultDetector) (CircuitBreaker, error) {
+	client := NewClient(protocol)
 	return NewCircuitBreaker(client, detector)
 }
 
@@ -38,7 +35,7 @@ func NewCircuitBreaker(client Client, detector FaultDetector) (CircuitBreaker, e
 		FaultDetector: detector,
 	}
 	client.SetTimeout(checkRequestTimeout)
-	if err := client.SetServer(detector.ObservedServer().String()); err != nil {
+	if err := client.SetServer(detector.ObservedServer()); err != nil {
 		return nil, err
 	}
 	return breaker, nil
@@ -55,8 +52,12 @@ func (breaker *circuitBreaker) Closed() bool {
 	return breaker.client.Closed()
 }
 
+func (breaker *circuitBreaker) ResetConnection() {
+	breaker.client.ResetConnection()
+}
+
 func (breaker *circuitBreaker) SetServer(server_addr string) error {
-	if breaker.ObservedServer().String() != server_addr {
+	if breaker.ObservedServer() != server_addr {
 		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", breaker.ObservedServer(), server_addr)
 	}
 	return nil

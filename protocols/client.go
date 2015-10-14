@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	DefaultTimeout = time.Second * 1
+	DefaultTimeout = 1 * time.Second
 )
 
 type Client interface {
 	Close() error
 	Closed() bool
+	ResetConnection() // Will open new connection next time it's required
 
 	SetServer(server_addr string) error
 	Server() Addr
@@ -32,43 +33,27 @@ type Client interface {
 
 type client struct {
 	serverAddr Addr
-	localAddr  Addr
 	conn       Conn
 
 	protocol    Protocol
-	timeout     time.Duration
 	closed      *helpers.OneshotCondition
 	requestLock sync.Mutex
+
+	// The worst case delay for one request will be up to two times this.
+	timeout time.Duration
 }
 
-func NewClient(local_ip string, protocol Protocol) (Client, error) {
-	localAddr, err := Transport.ResolveIP(local_ip)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := Transport.Listen(localAddr, protocol)
-	if err != nil {
-		return nil, err
-	}
+func NewClient(protocol Protocol) Client {
 	return &client{
-		timeout:   DefaultTimeout,
-		protocol:  protocol,
-		localAddr: conn.LocalAddr(),
-		conn:      conn,
-		closed:    helpers.NewOneshotCondition(),
-	}, nil
+		protocol: protocol,
+		closed:   helpers.NewOneshotCondition(),
+		timeout:  DefaultTimeout,
+	}
 }
 
 func NewClientFor(server string, protocol Protocol) (Client, error) {
-	localAddr, err := Transport.ResolveLocal(server)
-	if err != nil {
-		return nil, err
-	}
-	client, err := NewClient(localAddr.IP().String(), protocol)
-	if err != nil {
-		return nil, err
-	}
-	if err = client.SetServer(server); err != nil {
+	client := NewClient(protocol)
+	if err := client.SetServer(server); err != nil {
 		_ = client.Close()
 		return nil, err
 	}
@@ -82,7 +67,9 @@ func NewMiniClientFor(server_addr string, fragment ProtocolFragment) (Client, er
 
 func (client *client) Close() (err error) {
 	client.closed.Enable(func() {
-		err = client.conn.Close()
+		if client.conn != nil {
+			err = client.conn.Close()
+		}
 	})
 	return
 }
@@ -108,17 +95,32 @@ func (client *client) SetTimeout(timeout time.Duration) {
 }
 
 func (client *client) SetServer(server_addr string) error {
-	serverAddr, err := Transport.Resolve(server_addr)
+	addr, err := client.protocol.Transport().Resolve(server_addr)
 	if err != nil {
 		return err
 	}
-	client.serverAddr = serverAddr
+	client.ResetConnection()
+	client.serverAddr = addr
 	return nil
+}
+
+func (client *client) ResetConnection() {
+	if client.conn != nil {
+		_ = client.conn.Close() // Drop error...
+		client.conn = nil
+	}
 }
 
 func (client *client) checkServer() error {
 	if client.serverAddr == nil {
-		return fmt.Errorf("Use SetServer to set the server address for %v client", client.protocol.Name())
+		return fmt.Errorf("Use SetServer to configure %v client", client.protocol.Name())
+	}
+	if client.conn == nil {
+		conn, err := client.protocol.Transport().Dial(client.serverAddr, client.protocol)
+		if err != nil {
+			return err
+		}
+		client.conn = conn
 	}
 	return nil
 }
@@ -127,7 +129,7 @@ func (client *client) SendPacket(packet *Packet) error {
 	if err := client.checkServer(); err != nil {
 		return err
 	}
-	return client.conn.Send(packet, client.serverAddr)
+	return client.conn.Send(packet, client.timeout)
 }
 
 func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
@@ -136,21 +138,15 @@ func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err erro
 	}
 	client.requestLock.Lock()
 	defer client.requestLock.Unlock()
-	if err = client.conn.Send(packet, client.serverAddr); err == nil {
-		if client.timeout != 0 {
-			var zeroTime time.Time
-			defer client.conn.SetDeadline(zeroTime)
-			if err = client.conn.SetDeadline(time.Now().Add(client.timeout)); err != nil {
-				return
-			}
-		}
-		reply, err = client.conn.Receive()
+	if err = client.conn.Send(packet, client.timeout); err == nil {
+		reply, err = client.conn.Receive(client.timeout)
 		if err != nil {
-			err = fmt.Errorf("Receiving %s reply from %s: %s", client.protocol.Name(), client.serverAddr, err)
+			err = fmt.Errorf("Receiving %s reply from %s: %s", client.protocol.Name(), client.conn.RemoteAddr(), err)
 		}
 	} else {
-		err = fmt.Errorf("Sending %s request to %s: %s", client.protocol.Name(), client.serverAddr, err)
+		err = fmt.Errorf("Sending %s request to %s: %s", client.protocol.Name(), client.conn.RemoteAddr(), err)
 	}
+	client.ResetConnection() // TODO hack to make tcp work...
 	return
 }
 

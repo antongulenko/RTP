@@ -90,13 +90,13 @@ type pingServer struct {
 	*protocols.Server
 }
 
-func (server *pingServer) handlePing(packet *protocols.Packet) {
+func (server *pingServer) handlePing(packet *protocols.Packet) *protocols.Packet {
 	val := packet.Val
 	if ping, ok := val.(*PingPacket); ok {
-		server.Reply(packet, codePong, ping.PongValue())
+		return server.Reply(codePong, ping.PongValue())
 	} else {
 		err := fmt.Errorf("%s Ping received with wrong payload: (%T) %v", server.Name(), val, val)
-		server.ReplyError(packet, err)
+		return server.ReplyError(err)
 	}
 }
 
