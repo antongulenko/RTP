@@ -57,8 +57,16 @@ func (breaker *circuitBreaker) ResetConnection() {
 }
 
 func (breaker *circuitBreaker) SetServer(server_addr string) error {
-	if breaker.ObservedServer() != server_addr {
-		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", breaker.ObservedServer(), server_addr)
+	want, err := breaker.Protocol().Transport().Resolve(server_addr)
+	if err != nil {
+		return err
+	}
+	have, err := breaker.Protocol().Transport().Resolve(server_addr)
+	if err != nil {
+		return err
+	}
+	if have.String() != want.String() {
+		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", have, want)
 	}
 	return nil
 }
