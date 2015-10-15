@@ -154,9 +154,9 @@ func (group *ObserveeGroup) WaitForAny(wg *sync.WaitGroup) Observee {
 }
 
 func (group *ObserveeGroup) ReverseStop() {
-	var wg sync.WaitGroup
 	for i := len(group.names) - 1; i >= 0; i-- {
 		// Stop groups in reverse order
+		var wg sync.WaitGroup
 		observees := group.groups[group.names[i]]
 		for _, observee := range observees {
 			// Stop observees in one group in parallel
@@ -166,8 +166,8 @@ func (group *ObserveeGroup) ReverseStop() {
 				observee.Stop()
 			}(observee)
 		}
+		wg.Wait()
 	}
-	wg.Wait()
 }
 
 func (group *ObserveeGroup) WaitAndStop(wg *sync.WaitGroup) Observee {
