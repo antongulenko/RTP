@@ -133,11 +133,11 @@ func (client *client) SendPacket(packet *Packet) error {
 }
 
 func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
+	client.requestLock.Lock()
+	defer client.requestLock.Unlock()
 	if err = client.checkServer(); err != nil {
 		return
 	}
-	client.requestLock.Lock()
-	defer client.requestLock.Unlock()
 	if err = client.conn.Send(packet, client.timeout); err == nil {
 		reply, err = client.conn.Receive(client.timeout)
 		if err != nil {
