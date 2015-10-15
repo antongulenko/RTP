@@ -158,9 +158,9 @@ func (group *ObserveeGroup) ReverseStop() {
 	for i := len(group.names) - 1; i >= 0; i-- {
 		// Stop groups in reverse order
 		observees := group.groups[group.names[i]]
-		wg.Add(1)
 		for _, observee := range observees {
 			// Stop observees in one group in parallel
+			wg.Add(1)
 			go func(observee Observee) {
 				defer wg.Done()
 				observee.Stop()
