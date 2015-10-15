@@ -13,10 +13,11 @@ type ampBalancingHandler struct {
 }
 
 type ampBalancingSession struct {
-	client         *amp.Client
-	control_client *amp_control.Client
-	receiverHost   string
-	receiverPort   int
+	balancingSession *balancer.BalancingSession
+	client           *amp.Client
+	control_client   *amp_control.Client
+	receiverHost     string
+	receiverPort     int
 }
 
 func NewAmpBalancingPlugin(make_detector balancer.FaultDetectorFactory) *balancer.BalancingPlugin {
@@ -55,10 +56,11 @@ func (handler *ampBalancingHandler) NewSession(balancerSession *balancer.Balanci
 		return nil, err
 	}
 	return &ampBalancingSession{
-		client:         client,
-		control_client: control_client,
-		receiverHost:   desc.ReceiverHost,
-		receiverPort:   desc.Port,
+		client:           client,
+		control_client:   control_client,
+		receiverHost:     desc.ReceiverHost,
+		receiverPort:     desc.Port,
+		balancingSession: balancerSession,
 	}, nil
 }
 
@@ -84,5 +86,6 @@ func (session *ampBalancingSession) RedirectStream(newHost string, newPort int) 
 }
 
 func (session *ampBalancingSession) HandleServerFault() (*balancer.BackendServer, error) {
-	return nil, fmt.Errorf("Fault handling not implemented for AMP servers")
+	// Fault handling not implemented, just hope that Primary comes back online...
+	return session.balancingSession.PrimaryServer, nil
 }

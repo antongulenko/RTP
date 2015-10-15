@@ -51,7 +51,7 @@ func startProxies(rtp_port int) (string, int) {
 			log.Printf("Starting external proxies using %v\n", client)
 			makeProxyPCP(client, proxy_port, rtp_port)
 			makeProxyPCP(client, proxy_port+1, rtp_port+1)
-			observees = append(observees, CleanupObservee(func() {
+			observees.AddNamed("proxy", CleanupObservee(func() {
 				closeProxyPCP(client, proxy_port, rtp_port)
 				closeProxyPCP(client, proxy_port+1, rtp_port+1)
 				Printerr(client.Close())
@@ -60,7 +60,7 @@ func startProxies(rtp_port int) (string, int) {
 			proxy1 := makeProxy(proxy_port, rtp_port)
 			proxy2 := makeProxy(proxy_port+1, rtp_port+1)
 			statistics = append(statistics, proxy1.Stats, proxy2.Stats)
-			observees = append(observees, proxy1, proxy2, CleanupObservee(func() {
+			observees.AddNamed("proxy", proxy1, proxy2, CleanupObservee(func() {
 				if proxy1.Err != nil {
 					log.Printf("Proxy %v error: %v\n", proxy_port, proxy1.Err)
 				}

@@ -35,7 +35,7 @@ func NewCircuitBreaker(client Client, detector FaultDetector) (CircuitBreaker, e
 		FaultDetector: detector,
 	}
 	client.SetTimeout(checkRequestTimeout)
-	if err := client.SetServer(detector.ObservedServer()); err != nil {
+	if err := client.SetServer(detector.ObservedServer().String()); err != nil {
 		return nil, err
 	}
 	return breaker, nil
@@ -57,16 +57,12 @@ func (breaker *circuitBreaker) ResetConnection() {
 }
 
 func (breaker *circuitBreaker) SetServer(server_addr string) error {
-	want, err := breaker.Protocol().Transport().Resolve(server_addr)
+	addr, err := breaker.Protocol().Transport().Resolve(server_addr)
 	if err != nil {
 		return err
 	}
-	have, err := breaker.Protocol().Transport().Resolve(server_addr)
-	if err != nil {
-		return err
-	}
-	if have.String() != want.String() {
-		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", have, want)
+	if addr.String() != breaker.ObservedServer().String() {
+		return fmt.Errorf("Cannot SetServer with address different from FaultDetector. Have %v, received %v.", breaker.ObservedServer(), addr)
 	}
 	return nil
 }

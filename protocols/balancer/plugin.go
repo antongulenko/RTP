@@ -46,7 +46,6 @@ type BalancingSession struct {
 
 type BalancingSessionHandler interface {
 	StopRemote() error
-	BackgroundStopRemote()
 	RedirectStream(newHost string, newPort int) error
 	HandleServerFault() (*BackendServer, error)
 }

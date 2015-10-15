@@ -51,8 +51,8 @@ func main() {
 
 	log.Println("Listening:", server, "Backend URL:", rtsp_url)
 	log.Println("Press Ctrl-D to close")
-	WaitAndStopObservees(nil, []Observee{
+	NewObserveeGroup(
 		server,
 		&NoopObservee{StdinClosed(), "stdin closed"},
-	})
+	).WaitAndStop(nil)
 }
