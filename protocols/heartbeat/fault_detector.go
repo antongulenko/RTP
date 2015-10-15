@@ -99,7 +99,7 @@ func (server *HeartbeatServer) ObserveServer(endpoint string, heartbeatFrequency
 		}
 	}
 	detector := &HeartbeatFaultDetector{
-		FaultDetectorBase:  protocols.NewFaultDetectorBase(server.Protocol(), endpoint),
+		FaultDetectorBase:  protocols.NewFaultDetectorBase(server.Protocol(), client.Server()),
 		client:             client,
 		acceptableTimeout:  acceptableTimeout,
 		heartbeatFrequency: heartbeatFrequency,

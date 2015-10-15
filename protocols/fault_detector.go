@@ -25,7 +25,7 @@ type FaultDetector interface {
 	Error() error
 	Online() bool
 	ErrorDetected(err error)
-	ObservedServer() string
+	ObservedServer() Addr
 	AddCallback(callback FaultDetectorCallback, key interface{})
 }
 
@@ -36,7 +36,7 @@ type faultDetectorCallbackData struct {
 
 type observedServer struct {
 	protocol Protocol
-	addr     string
+	addr     Addr
 }
 
 type FaultDetectorBase struct {
@@ -46,7 +46,7 @@ type FaultDetectorBase struct {
 	Closed         *helpers.OneshotCondition
 }
 
-func NewFaultDetectorBase(observedProtocol Protocol, server string) *FaultDetectorBase {
+func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetectorBase {
 	return &FaultDetectorBase{
 		lastErr: stateUnknown,
 		observedServer: observedServer{
@@ -57,7 +57,7 @@ func NewFaultDetectorBase(observedProtocol Protocol, server string) *FaultDetect
 	}
 }
 
-func (detector *FaultDetectorBase) ObservedServer() string {
+func (detector *FaultDetectorBase) ObservedServer() Addr {
 	return detector.observedServer.addr
 }
 

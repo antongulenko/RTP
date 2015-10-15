@@ -13,7 +13,6 @@ const (
 type FaultDetector struct {
 	*protocols.FaultDetectorBase
 	client *Client
-	server string
 }
 
 func NewFaultDetector(client protocols.Client, server string) (*FaultDetector, error) {
@@ -21,10 +20,14 @@ func NewFaultDetector(client protocols.Client, server string) (*FaultDetector, e
 	if err != nil {
 		return nil, err
 	}
+	err = pingClient.SetServer(server)
+	if err != nil {
+		_ = pingClient.Close()
+		return nil, err
+	}
 	return &FaultDetector{
-		FaultDetectorBase: protocols.NewFaultDetectorBase(client.Protocol(), server),
+		FaultDetectorBase: protocols.NewFaultDetectorBase(client.Protocol(), pingClient.Server()),
 		client:            pingClient,
-		server:            server,
 	}, nil
 }
 
@@ -49,12 +52,6 @@ func (detector *FaultDetector) Check() {
 }
 
 func (detector *FaultDetector) doPing() error {
-	if detector.client.Server() == nil {
-		err := detector.client.SetServer(detector.server)
-		if err != nil {
-			return err
-		}
-	}
 	err := detector.client.Ping()
 	// Next ping with fresh connection
 	detector.client.ResetConnection()
