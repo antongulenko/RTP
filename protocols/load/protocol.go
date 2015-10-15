@@ -11,19 +11,24 @@ import (
 
 var (
 	Protocol     *loadProtocol
-	MiniProtocol = protocols.NewMiniProtocolTransport(Protocol, protocols.UdpTransport())
+	MiniProtocol = protocols.NewMiniProtocolTransport(Protocol, protocols.UdpTransportB(2048))
 )
 
 const (
 	codeLoad   = protocols.Code(100)
-	PacketSize = 45 // Reported by tcpdump
+	PacketSize = 57 // Reported by tcpdump, size of LoadPacket with empty Payload. Varies between 55-57.
 )
 
 type LoadPacket struct {
-	Seq uint
+	Seq     uint
+	Payload []byte
 }
 
 type loadProtocol struct {
+}
+
+func (packet *LoadPacket) Size() uint {
+	return PacketSize + uint(len(packet.Payload))
 }
 
 func (*loadProtocol) Name() string {

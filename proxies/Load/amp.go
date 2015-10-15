@@ -19,6 +19,8 @@ var (
 type LoadServer struct {
 	*protocols.Server
 	sessions protocols.Sessions
+
+	PayloadSize uint
 }
 
 type loadSession struct {
@@ -27,12 +29,12 @@ type loadSession struct {
 	load   uint64
 }
 
-func RegisterLoadServer(server *protocols.Server) error {
+func RegisterLoadServer(server *protocols.Server) (*LoadServer, error) {
 	load := &LoadServer{
 		sessions: make(protocols.Sessions),
 		Server:   server,
 	}
-	return amp.RegisterServer(server, load)
+	return load, amp.RegisterServer(server, load)
 }
 
 func (server *LoadServer) StopServer() {
@@ -121,6 +123,9 @@ func (server *LoadServer) newStreamSession(desc *amp.StartStream) (*loadSession,
 	load, err := strconv.Atoi(desc.MediaFile)
 	if err != nil {
 		load = DefaultLoad
+	}
+	if err := client.SetPayload(server.PayloadSize); err != nil {
+		server.LogError(err)
 	}
 	return &loadSession{
 		client: client,

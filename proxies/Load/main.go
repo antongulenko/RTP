@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 
 	. "github.com/antongulenko/RTP/helpers"
@@ -18,14 +19,16 @@ func printErrors(server *protocols.Server) {
 }
 
 func main() {
+	payloadSize := flag.Uint("payload", 0, "Additional payload to append to Load packets")
 	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7770)
 
 	proto, err := protocols.NewProtocol("AMP/Load", amp.Protocol, amp_control.Protocol, ping.Protocol, heartbeat.Protocol)
 	Checkerr(err)
 	server, err := protocols.NewServer(amp_addr, proto)
 	Checkerr(err)
-	err = RegisterLoadServer(server)
+	loadServer, err := RegisterLoadServer(server)
 	Checkerr(err)
+	loadServer.PayloadSize = *payloadSize
 
 	go printErrors(server)
 	server.Start()

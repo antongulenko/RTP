@@ -1,6 +1,8 @@
 package load
 
 import (
+	"crypto/rand"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,11 +12,12 @@ import (
 
 type Client struct {
 	protocols.Client
-	seq         uint
-	loadRunning bool
-	wg          sync.WaitGroup
-	waitTime    time.Duration
-	lastErr     error
+	seq          uint
+	loadRunning  bool
+	wg           sync.WaitGroup
+	waitTime     time.Duration
+	lastErr      error
+	extraPayload []byte
 
 	pausedCond *sync.Cond
 	paused     bool
@@ -30,16 +33,28 @@ func NewClient() *Client {
 	return client
 }
 
+func (client *Client) SetPayload(size uint) error {
+	payload := make([]byte, size)
+	_, err := rand.Read(payload)
+	if err != nil {
+		return fmt.Errorf("Warning: error reading random payload data:", err)
+	}
+	client.extraPayload = payload
+	return nil
+}
+
 func (client *Client) SendLoad() error {
 	err := client.Send(codeLoad, &LoadPacket{
-		Seq: client.seq,
+		Seq:     client.seq,
+		Payload: client.extraPayload,
 	})
 	client.seq++
 	return err
 }
 
 func (client *Client) StartLoad(bytePerSecond uint64) {
-	client.waitTime = time.Duration(uint64(time.Second) * PacketSize / bytePerSecond)
+	size := PacketSize + uint64(len(client.extraPayload))
+	client.waitTime = time.Duration(uint64(time.Second) * size / bytePerSecond)
 	client.Resume()
 }
 

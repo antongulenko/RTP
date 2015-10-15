@@ -105,6 +105,11 @@ func startLoadClient() (port int) {
 		break
 	}
 	observees.AddNamed("client", server)
+	go func() {
+		for err := range server.Errors() {
+			log.Println("Error receiving Load:", err)
+		}
+	}()
 	server.Start()
 	log.Printf("Listening on %v UDP port %v for Load\n", rtp_ip, port)
 
@@ -142,7 +147,7 @@ func stopObservees() {
 func parseFlags() {
 	flag.IntVar(&num_clients, "num", num_clients,
 		"Number of parallel RTP streams to initiate.\n"+
-			"proxy_port and rtp_port will be used as starting point for allocating the required number of ports.")
+			"\t\tproxy_port and rtp_port will be used as starting point for allocating the required number of ports.")
 
 	flag.BoolVar(&close_stdin, "stdin", close_stdin, "Exit when stdin is closed")
 	flag.BoolVar(&close_int, "int", close_int, "Exit when INT signal is received")
