@@ -68,7 +68,7 @@ func (session *pcpBalancingSession) StopRemote() error {
 	return session.client.StopProxyPair(session.proxyPort)
 }
 
-func (session *pcpBalancingSession) BackgroundStopRemote() {
+func (session *pcpBalancingSession) backgroundStopRemote() {
 	client := session.client
 	port := session.proxyPort
 	go client.StopProxyPair(port) // Drops error
@@ -79,6 +79,10 @@ func (session *pcpBalancingSession) RedirectStream(newHost string, newPort int) 
 }
 
 func (session *pcpBalancingSession) HandleServerFault() (*balancer.BackendServer, error) {
+	// Fencing: Stop the original node just to be sure.
+	// TODO more reliable fencing.
+	session.backgroundStopRemote()
+
 	// Check preconditions for failover
 	sending := session.balancingSession.SendingSession
 	sending2, ok := sending.(*balancer.BalancingSession)

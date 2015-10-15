@@ -115,9 +115,6 @@ func (server *BackendServer) handleStateChanged() {
 }
 
 func (server *BackendServer) failoverSession(session *BalancingSession, failoverChan chan<- failoverResults, wg *sync.WaitGroup) {
-	// Fencing: Stop the original node just to be sure.
-	// TODO more reliable fencing.
-	session.Handler.BackgroundStopRemote()
 	if newServer, err := session.Handler.HandleServerFault(); err != nil {
 		failoverChan <- failoverResults{nil, session, err}
 	} else {
