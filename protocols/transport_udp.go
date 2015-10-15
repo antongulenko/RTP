@@ -18,7 +18,11 @@ type udpTransportProvider struct {
 }
 
 func UdpTransport() TransportProvider {
-	return &udpTransportProvider{"udp4", 512}
+	return UdpTransportB(512)
+}
+
+func UdpTransportB(bufferSize int) TransportProvider {
+	return &udpTransportProvider{"udp4", bufferSize}
 }
 
 func (trans *udpTransportProvider) String() string {
@@ -231,9 +235,6 @@ func (conn *udpConn) LocalAddr() Addr {
 }
 
 func (conn *udpConn) RemoteAddr() Addr {
-	if conn.remote == nil {
-		panic("oups")
-	}
 	return conn.remote
 }
 
@@ -333,15 +334,20 @@ func (conn *udpConn) resetTimeout() {
 }
 
 func (conn *udpConn) send(b []byte, addr *net.UDPAddr) error {
-	_, err := conn.udp.WriteToUDP(b, addr)
-	// TODO check if everything was sent?
+	n, err := conn.udp.WriteToUDP(b, addr)
+	if err == nil && n != len(b) {
+		err = fmt.Errorf("Wrong number of bytes sent (%v != %v)", n, len(b))
+	}
 	return err
 }
 
 func (conn *udpConn) receive() ([]byte, *net.UDPAddr, error) {
-	buf := make([]byte, conn.trans.bufferSize)
+	size := conn.trans.bufferSize + 1 // One extra for >= check
+	buf := make([]byte, size)
 	n, addr, err := conn.udp.ReadFromUDP(buf)
-	// TODO check if data did not fit in buffer?
+	if err == nil && n >= size {
+		err = fmt.Errorf("Receive buffer %v too small (received %v)", conn.trans.bufferSize, n)
+	}
 	return buf[:n], addr, err
 }
 

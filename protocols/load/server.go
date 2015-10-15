@@ -43,9 +43,9 @@ func (stats *LoadStats) handleLoad(packet *protocols.Packet) *protocols.Packet {
 }
 
 func (stats *LoadStats) addPacket(packet *LoadPacket) {
-	stats.Received.AddNow(PacketSize)
+	stats.Received.AddNow(packet.Size())
 	if stats.seq < packet.Seq {
-		stats.Missed.AddNow(packet.Seq - stats.seq)
+		stats.Missed.AddPacketsNow(packet.Seq - stats.seq)
 	} else if stats.seq > packet.Seq {
 		stats.server.LogError(fmt.Errorf("Load sequence jump: %v -> %v", stats.seq, packet.Seq))
 	}
