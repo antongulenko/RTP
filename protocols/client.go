@@ -35,9 +35,11 @@ type client struct {
 	serverAddr Addr
 	conn       Conn
 
-	protocol    Protocol
-	closed      *helpers.OneshotCondition
-	requestLock sync.Mutex
+	protocol Protocol
+	closed   *helpers.OneshotCondition
+
+	// TODO use lock
+	connLock sync.Mutex
 
 	// The worst case delay for one request will be up to two times this.
 	timeout time.Duration
@@ -58,6 +60,10 @@ func NewClientFor(server string, protocol Protocol) (Client, error) {
 		return nil, err
 	}
 	return client, nil
+}
+
+func NewMiniClient(fragment ProtocolFragment) Client {
+	return NewClient(NewMiniProtocol(fragment))
 }
 
 func NewMiniClientFor(server_addr string, fragment ProtocolFragment) (Client, error) {
@@ -99,8 +105,8 @@ func (client *client) SetServer(server_addr string) error {
 	if err != nil {
 		return err
 	}
-	client.ResetConnection()
 	client.serverAddr = addr
+	client.ResetConnection()
 	return nil
 }
 
@@ -133,8 +139,8 @@ func (client *client) SendPacket(packet *Packet) error {
 }
 
 func (client *client) SendRequestPacket(packet *Packet) (reply *Packet, err error) {
-	client.requestLock.Lock()
-	defer client.requestLock.Unlock()
+	client.connLock.Lock()
+	defer client.connLock.Unlock()
 	if err = client.checkServer(); err != nil {
 		return
 	}

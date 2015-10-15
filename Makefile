@@ -28,3 +28,8 @@ latency:
 	go install github.com/antongulenko/RTP/latency_test \
 		&& echo latency_test \
 		|| echo false
+
+load:
+	go install github.com/antongulenko/RTP/proxies/Load \
+		&& echo Load \
+		|| echo false

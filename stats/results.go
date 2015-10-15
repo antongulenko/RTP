@@ -9,6 +9,10 @@ import (
 	"github.com/antongulenko/RTP/helpers"
 )
 
+const (
+	LongDelay = 3 * time.Second
+)
+
 var (
 	IncomingPacketChanBuffer = 50
 )
@@ -29,6 +33,7 @@ type Results struct {
 
 	totalPackets uint
 	totalBytes   uint
+	lastPacket   time.Time
 }
 
 func NewResults() *Results {
@@ -63,6 +68,7 @@ func (stats *Results) add(t time.Time, bytes uint) {
 	stats.stopped.IfNotEnabled(func() {
 		stats.totalPackets++
 		stats.totalBytes += bytes
+		stats.lastPacket = t
 		if stats.runningAverage {
 			stats.incomingPackets <- packet{t, bytes}
 		}
@@ -143,6 +149,12 @@ func (stats *Results) String() string {
 	ps := fmt.Sprintf("packets/s: %v (%v total)", stats.PacketsPerSecond(), stats.totalPackets)
 	if stats.totalBytes > 0 {
 		ps += fmt.Sprintf(", %v/s (%v total)", formatBytes(stats.BytesPerSecond()), formatBytes(float32(stats.totalBytes)))
+	}
+	if stats.totalPackets > 0 {
+		delay := time.Now().Sub(stats.lastPacket)
+		if delay > LongDelay {
+			ps += fmt.Sprintf(" (no packets for %v)", delay)
+		}
 	}
 	return ps
 }

@@ -4,10 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"strconv"
 	"time"
 
 	. "github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
+	"github.com/antongulenko/RTP/protocols/load"
 	"github.com/antongulenko/RTP/rtpClient"
 	"github.com/antongulenko/RTP/stats"
 	"github.com/antongulenko/gortp"
@@ -42,11 +46,13 @@ var (
 	use_rtsp = false
 	rtsp_url = "rtsp://127.0.1.1:8554/Sample.264"
 
+	use_load = false
+
 	rtp_ip         = "127.0.0.1"
 	start_rtp_port = 9000
 )
 
-func startClient() (rtp_port int) {
+func startRtpClient() (rtp_port int) {
 	rtp_port = start_rtp_port
 	var client *rtpClient.RtpClient
 	for {
@@ -75,6 +81,35 @@ func startClient() (rtp_port int) {
 		statistics = append(statistics, client.RtpSession.DroppedDataPackets)
 		statistics = append(statistics, client.RtpSession.DroppedCtrlPackets)
 	}
+	return
+}
+
+func startLoadClient() (port int) {
+	port = start_rtp_port
+	var server *protocols.Server
+	var stats *load.LoadStats
+	for {
+		var err error
+		server, err = protocols.NewServer(net.JoinHostPort(rtp_ip, strconv.Itoa(port)), load.MiniProtocol)
+		if err != nil {
+			log.Printf("Failed to start Load server on port %v: %v", port, err)
+			port += 2
+			continue
+		}
+		stats, err = load.RegisterServer(server)
+		if err != nil {
+			log.Printf("Failed to register Load server on port %v: %v", port, err)
+			port += 2
+			continue
+		}
+		break
+	}
+	observees.AddNamed("client", server)
+	server.Start()
+	log.Printf("Listening on %v UDP port %v for Load\n", rtp_ip, port)
+
+	statistics = append(statistics, stats.Received)
+	statistics = append(statistics, stats.Missed)
 	return
 }
 
@@ -109,8 +144,8 @@ func parseFlags() {
 		"Number of parallel RTP streams to initiate.\n"+
 			"proxy_port and rtp_port will be used as starting point for allocating the required number of ports.")
 
-	flag.BoolVar(&close_stdin, "stdin", false, "Exit when stdin is closed")
-	flag.BoolVar(&close_int, "int", true, "Exit when INT signal is received")
+	flag.BoolVar(&close_stdin, "stdin", close_stdin, "Exit when stdin is closed")
+	flag.BoolVar(&close_int, "int", close_int, "Exit when INT signal is received")
 
 	flag.BoolVar(&show_dropped_packets_stats, "dropped_packet_stats", show_dropped_packets_stats, "Show numbers of packets dropped within the gortp stack")
 	flag.BoolVar(&print_stats, "stats", print_stats, "Show various statistics about traffic")
@@ -133,20 +168,31 @@ func parseFlags() {
 	flag.StringVar(&rtp_ip, "rtp", rtp_ip, "The local IP used to receive RTP/RTCP traffic")
 	flag.IntVar(&start_rtp_port, "rtp_port", start_rtp_port, "The local port to receive RTP traffic")
 
+	flag.BoolVar(&use_load, "load", use_load, "Listen for Load traffic instead of RTP/RTCP traffic")
+
 	flag.Parse()
+
 	use_proxy = use_proxy || use_pcp
 	use_proxy = use_proxy || pretend_proxy
+	if use_load && use_rtsp {
+		Checkerr(fmt.Errorf("-load cannot be used with -rtsp"))
+	}
 }
 
 func startScenario() {
-	rtp_port := startClient()
-	start_rtp_port = rtp_port + 2
+	var client_port int
+	if use_load {
+		client_port = startLoadClient()
+	} else {
+		client_port = startRtpClient()
+	}
+	start_rtp_port = client_port + 2
 	stream_ip := rtp_ip
 	if use_proxy {
-		stream_ip, rtp_port = startProxies(rtp_port)
+		stream_ip, client_port = startProxies(client_port)
 		proxy_port += 2
 	}
-	startStream(stream_ip, rtp_port)
+	startStream(stream_ip, client_port)
 }
 
 func printStatistics() {
@@ -172,7 +218,6 @@ func main() {
 	for i := 0; i < num_clients; i++ {
 		startScenario()
 	}
-
 	if print_stats {
 		printStatistics()
 	}
@@ -185,6 +230,7 @@ func main() {
 		log.Println("Press Ctrl-C to interrupt")
 		observees.Add(&NoopObservee{ExternalInterrupt(), "external interrupt"})
 	}
+
 	choice := observees.WaitForAny(nil)
 	log.Printf("Stopped because of %T: %v\n", choice, choice)
 	stopObservees()

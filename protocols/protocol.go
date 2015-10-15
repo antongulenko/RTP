@@ -64,7 +64,11 @@ func NewProtocolTransport(name string, transport TransportProvider, fragments ..
 }
 
 func NewMiniProtocol(fragment ProtocolFragment) *protocol {
-	proto, err := NewProtocol(fragment.Name(), fragment)
+	return NewMiniProtocolTransport(fragment, DefaultTransport)
+}
+
+func NewMiniProtocolTransport(fragment ProtocolFragment, transport TransportProvider) *protocol {
+	proto, err := NewProtocolTransport(fragment.Name(), transport, fragment)
 	if err != nil {
 		panic(fmt.Errorf("Creating single-fragment protocol should never fail (err: %v)", err))
 	}
