@@ -106,31 +106,73 @@ func WaitForAny(channels []<-chan interface{}) int {
 	return choice
 }
 
-func WaitForAnyObservee(wg *sync.WaitGroup, observees []Observee) int {
+func WaitForAnyObservee(wg *sync.WaitGroup, observees []Observee) Observee {
 	channels := make([]<-chan interface{}, 0, len(observees))
 	for _, observee := range observees {
 		if channel := observee.Observe(wg); channel != nil {
 			channels = append(channels, channel)
 		}
 	}
-	return WaitForAny(channels)
+	choice := WaitForAny(channels)
+	return observees[choice]
 }
 
-func ReverseStopObservees(observees []Observee) {
+// ========= Observee Group
+
+type ObserveeGroup struct {
+	names  []string              // Track order of added new groups
+	groups map[string][]Observee // Groups will be stopped sequentially, but Observees in one group in parallel
+	all    []Observee
+}
+
+func NewObserveeGroup(observees ...Observee) *ObserveeGroup {
+	group := &ObserveeGroup{
+		groups: make(map[string][]Observee),
+	}
+	for _, o := range observees {
+		group.Add(o)
+	}
+	return group
+}
+
+func (group *ObserveeGroup) Add(observee ...Observee) {
+	group.AddNamed("default", observee...)
+}
+
+func (group *ObserveeGroup) AddNamed(name string, observee ...Observee) {
+	if list, ok := group.groups[name]; ok {
+		group.groups[name] = append(list, observee...)
+	} else {
+		group.groups[name] = observee
+		group.names = append(group.names, name)
+	}
+	group.all = append(group.all, observee...)
+}
+
+func (group *ObserveeGroup) WaitForAny(wg *sync.WaitGroup) Observee {
+	return WaitForAnyObservee(wg, group.all)
+}
+
+func (group *ObserveeGroup) ReverseStop() {
 	var wg sync.WaitGroup
-	for i := len(observees) - 1; i >= 0; i-- {
+	for i := len(group.names) - 1; i >= 0; i-- {
+		// Stop groups in reverse order
+		observees := group.groups[group.names[i]]
 		wg.Add(1)
-		go func(observee Observee) {
-			defer wg.Done()
-			observee.Stop()
-		}(observees[i])
+		for _, observee := range observees {
+			// Stop observees in one group in parallel
+			go func(observee Observee) {
+				defer wg.Done()
+				observee.Stop()
+			}(observee)
+		}
 	}
 	wg.Wait()
 }
 
-func WaitAndStopObservees(wg *sync.WaitGroup, observees []Observee) int {
-	choice := WaitForAnyObservee(wg, observees)
-	ReverseStopObservees(observees)
+func (group *ObserveeGroup) WaitAndStop(wg *sync.WaitGroup) Observee {
+	choice := group.WaitForAny(wg)
+	group.ReverseStop()
 	return choice
 }
 

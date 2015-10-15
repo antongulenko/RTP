@@ -144,11 +144,11 @@ func (detector *HeartbeatFaultDetector) Check() {
 }
 
 func (detector *HeartbeatFaultDetector) configureObservedServer() {
+	detector.seq = 0
 	detector.configError = detector.client.ConfigureHeartbeat(detector.server.Server, detector.token, detector.heartbeatFrequency)
 	if detector.configError != nil {
 		detector.client.ResetConnection()
 	}
-	detector.seq = 0
 }
 
 func (detector *HeartbeatFaultDetector) Start() {

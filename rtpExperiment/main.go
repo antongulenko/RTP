@@ -15,7 +15,7 @@ import (
 
 var (
 	statistics []*stats.Stats
-	observees  []Observee
+	observees  = NewObserveeGroup()
 )
 
 var (
@@ -59,7 +59,7 @@ func startClient() (rtp_port int) {
 			break
 		}
 	}
-	observees = append(observees, client)
+	observees.AddNamed("client", client)
 	log.Printf("Listening on %v UDP ports %v and %v for rtp/rtcp\n", rtp_ip, rtp_port, rtp_port+1)
 
 	if print_ctrl_events {
@@ -84,7 +84,7 @@ func startStream(target_ip string, rtp_port int) {
 		client, err := amp.NewClientFor(amp_url)
 		Checkerr(err)
 		Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
-		observees = append(observees, CleanupObservee(func() {
+		observees.AddNamed("stream", CleanupObservee(func() {
 			Printerr(client.StopStream(target_ip, rtp_port))
 			Printerr(client.Close())
 		}))
@@ -96,12 +96,12 @@ func startStream(target_ip string, rtp_port int) {
 		log.Println("Starting stream using RTSP at", rtsp_url)
 		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
 		Checkerr(err)
-		observees = append(observees, rtspCommand)
+		observees.AddNamed("rtsp", rtspCommand)
 	}
 }
 
 func stopObservees() {
-	ReverseStopObservees(observees)
+	observees.ReverseStop()
 }
 
 func parseFlags() {
@@ -157,11 +157,12 @@ func printStatistics() {
 	if running_average {
 		agg.Start()
 	}
-	observees = append(observees, LoopObservee(func() {
-		agg.Flush(3)
-		fmt.Printf("==============\n%s", agg.String())
-		time.Sleep(time.Second)
-	}))
+	observees.AddNamed("stats",
+		LoopObservee(func() {
+			agg.Flush(3)
+			fmt.Printf("==============\n%s", agg.String())
+			time.Sleep(time.Second)
+		}))
 }
 
 func main() {
@@ -178,13 +179,13 @@ func main() {
 
 	if close_stdin {
 		log.Println("Press Ctrl-D to interrupt")
-		observees = append(observees, &NoopObservee{StdinClosed(), "stdin closed"})
+		observees.Add(&NoopObservee{StdinClosed(), "stdin closed"})
 	}
 	if close_int {
 		log.Println("Press Ctrl-C to interrupt")
-		observees = append(observees, &NoopObservee{ExternalInterrupt(), "external interrupt"})
+		observees.Add(&NoopObservee{ExternalInterrupt(), "external interrupt"})
 	}
-	choice := WaitForAnyObservee(nil, observees)
-	log.Printf("Stopped because of %T: %v\n", observees[choice], observees[choice])
+	choice := observees.WaitForAny(nil)
+	log.Printf("Stopped because of %T: %v\n", choice, choice)
 	stopObservees()
 }

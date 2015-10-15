@@ -45,8 +45,8 @@ func main() {
 
 	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
-	WaitAndStopObservees(nil, []Observee{
+	NewObserveeGroup(
 		proxy,
 		&NoopObservee{ExternalInterrupt(), "external interrupt"},
-	})
+	).WaitAndStop(nil)
 }
