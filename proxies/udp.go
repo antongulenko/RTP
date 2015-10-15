@@ -259,7 +259,11 @@ func (proxy *UdpProxy) ResumeWrite() {
 func (proxy *UdpProxy) waitWhilePaused() {
 	proxy.writePausedCond.L.Lock()
 	defer proxy.writePausedCond.L.Unlock()
+	wasPaused := proxy.writePaused
 	for proxy.writePaused {
 		proxy.writePausedCond.Wait()
+	}
+	if wasPaused {
+		proxy.writeError(fmt.Errorf("Resuming %v", proxy))
 	}
 }

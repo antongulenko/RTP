@@ -15,6 +15,7 @@ type TransportProvider interface {
 	ResolveLocal(remote_addr string) (Addr, error)
 	Listen(local Addr, protocol Protocol) (Listener, error)
 	Dial(remote Addr, protocol Protocol) (Conn, error)
+	String() string
 }
 
 type Listener interface {

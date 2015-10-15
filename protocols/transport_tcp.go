@@ -17,6 +17,10 @@ func TcpTransport() TransportProvider {
 	return &tcpTransportProvider{"tcp4", 512}
 }
 
+func (trans *tcpTransportProvider) String() string {
+	return trans.net + " transport"
+}
+
 func (trans *tcpTransportProvider) Resolve(addr string) (Addr, error) {
 	return trans.newAddr(net.ResolveTCPAddr(trans.net, addr))
 }

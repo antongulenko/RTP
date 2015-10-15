@@ -21,6 +21,10 @@ func UdpTransport() TransportProvider {
 	return &udpTransportProvider{"udp4", 512}
 }
 
+func (trans *udpTransportProvider) String() string {
+	return trans.net + " transport"
+}
+
 func (trans *udpTransportProvider) Resolve(addr string) (Addr, error) {
 	return trans.newAddr(net.ResolveUDPAddr(trans.net, addr))
 }
