@@ -48,6 +48,8 @@ var (
 
 	use_load = false
 
+	client_timeout = 2.0
+
 	rtp_ip         = "127.0.0.1"
 	start_rtp_port = 9000
 )
@@ -122,6 +124,7 @@ func startStream(target_ip string, rtp_port int) {
 	if use_amp {
 		log.Println("Starting stream using AMP at", amp_url)
 		client, err := amp.NewClientFor(amp_url)
+		client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 		Checkerr(err)
 		Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
 		observees.AddNamed("stream", CleanupObservee(func() {
@@ -174,6 +177,7 @@ func parseFlags() {
 	flag.IntVar(&start_rtp_port, "rtp_port", start_rtp_port, "The local port to receive RTP traffic")
 
 	flag.BoolVar(&use_load, "load", use_load, "Listen for Load traffic instead of RTP/RTCP traffic")
+	flag.Float64Var(&client_timeout, "timeout", client_timeout, "Timeout for client requests, if any are used")
 
 	flag.Parse()
 

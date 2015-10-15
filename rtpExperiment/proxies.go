@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"time"
 
 	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols/pcp"
@@ -47,6 +48,7 @@ func startProxies(rtp_port int) (string, int) {
 		if use_pcp {
 			proxy_ip = pcpProxyIp()
 			client, err := pcp.NewClientFor(pcp_url)
+			client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 			Checkerr(err)
 			log.Printf("Starting external proxies using %v\n", client)
 			makeProxyPCP(client, proxy_port, rtp_port)
