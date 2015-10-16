@@ -1,4 +1,4 @@
- 
+
 .SILENT:
 
 noint: noint.c
