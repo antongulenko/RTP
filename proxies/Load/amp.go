@@ -34,7 +34,14 @@ func RegisterLoadServer(server *protocols.Server) (*LoadServer, error) {
 		sessions: make(protocols.Sessions),
 		Server:   server,
 	}
-	return load, amp.RegisterServer(server, load)
+	if err := amp.RegisterServer(server, load); err != nil {
+		return nil, err
+	}
+	// TODO if second registration fails, the first registration still stays in the server...
+	if err := amp_control.RegisterServer(server, load); err != nil {
+		return nil, err
+	}
+	return load, nil
 }
 
 func (server *LoadServer) StopServer() {
