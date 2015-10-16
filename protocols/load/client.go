@@ -14,7 +14,6 @@ type Client struct {
 	protocols.Client
 	seq          uint
 	loadRunning  bool
-	wg           sync.WaitGroup
 	waitTime     time.Duration
 	lastErr      error
 	extraPayload []byte
@@ -59,9 +58,7 @@ func (client *Client) StartLoad(bytePerSecond uint64) {
 }
 
 func (client *Client) sendLoad() {
-	client.wg.Add(1)
 	go func() {
-		defer client.wg.Done()
 		for !client.Closed() {
 			client.waitWhilePaused()
 			if client.Closed() {
@@ -69,14 +66,20 @@ func (client *Client) sendLoad() {
 			}
 			client.lastErr = client.SendLoad()
 			if client.lastErr != nil {
+				client.pausedCond.L.Lock()
+				defer client.pausedCond.L.Unlock()
 				if client.Closed() {
 					client.lastErr = nil
 					return
+				} else {
+					client.Pause()
 				}
-				client.Pause()
 			}
 			if client.waitTime == 0 {
 				client.waitTime = 1 * time.Second
+			}
+			if client.Closed() {
+				return
 			}
 			time.Sleep(client.waitTime)
 		}
@@ -106,9 +109,10 @@ func (client *Client) waitWhilePaused() {
 
 func (client *Client) Close() error {
 	var err helpers.MultiError
+	client.pausedCond.L.Lock()
+	defer client.pausedCond.L.Unlock()
 	err.Add(client.Client.Close())
 	client.Resume()
-	client.wg.Wait()
 	err.Add(client.lastErr)
 	return err.NilOrError()
 }
