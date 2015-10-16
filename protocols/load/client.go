@@ -64,16 +64,15 @@ func (client *Client) sendLoad() {
 			if client.Closed() {
 				return
 			}
-			client.lastErr = client.SendLoad()
-			if client.lastErr != nil {
+			err := client.SendLoad()
+			if err != nil {
 				client.pausedCond.L.Lock()
 				defer client.pausedCond.L.Unlock()
 				if client.Closed() {
-					client.lastErr = nil
 					return
-				} else {
-					client.pause(false)
 				}
+				client.lastErr = err
+				client.pause(false)
 			}
 			if client.waitTime == 0 {
 				client.waitTime = 1 * time.Second
