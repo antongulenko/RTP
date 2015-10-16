@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	amp_servers = []string{"media-1:7777", "media-2:7777", "media-3:7777"}
-	pcp_servers = []string{"proxy-1:7778", "proxy-2:7778", "proxy-3:7778"}
+	load_servers     = []string{"media-1:7770", "media-2:7770", "media-3:7770"}
+	amp_servers      = []string{"media-1:7777", "media-2:7777", "media-3:7777"}
+	pcp_servers      = []string{"proxy-1:7778", "proxy-2:7778", "proxy-3:7778"}
 	heartbeat_server = "balancer:0" // Random port
 )
 
@@ -60,6 +61,7 @@ func stateChangePrinter(key interface{}) {
 }
 
 func main() {
+	loadBackend := flag.Bool("load", false, "Use Load servers to create the streams, instead of regular AMP Media servers")
 	useHeartbeat := flag.Bool("heartbeat", false, "Use heartbeat-based fault detection instead of active ping-based detection")
 	_heartbeat_frequency := flag.Uint("heartbeat_frequency", 200, "Time between two heartbeats which observers will send (milliseconds)")
 	_heartbeat_timeout := flag.Uint("heartbeat_timeout", 350, "Time between two heartbeats before assuming offline server (milliseconds)")
@@ -104,9 +106,16 @@ func main() {
 	pcpPlugin := amp_balancer.NewPcpBalancingPlugin(detector_factory)
 	server.AddPlugin(pcpPlugin)
 
-	for _, amp := range amp_servers {
-		err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
-		Checkerr(err)
+	if *loadBackend {
+		for _, load := range load_servers {
+			err := ampPlugin.AddBackendServer(load, stateChangePrinter)
+			Checkerr(err)
+		}
+	} else {
+		for _, amp := range amp_servers {
+			err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
+			Checkerr(err)
+		}
 	}
 	for _, pcp := range pcp_servers {
 		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
