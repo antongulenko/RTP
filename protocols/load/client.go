@@ -1,8 +1,8 @@
 package load
 
 import (
-	"crypto/rand"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -32,14 +32,13 @@ func NewClient() *Client {
 	return client
 }
 
-func (client *Client) SetPayload(size uint) error {
-	payload := make([]byte, size)
-	_, err := rand.Read(payload)
-	if err != nil {
-		return fmt.Errorf("Warning: error reading random payload data:", err)
+func (client *Client) SetPayload(size uint) {
+	client.extraPayload = make([]byte, size)
+	var i uint
+	for i = 0; i < size; i++ {
+		client.extraPayload[i] = byte(rand.Int())
 	}
-	client.extraPayload = payload
-	return nil
+	fmt.Println("LEN", len(client.extraPayload), "SIZE", size)
 }
 
 func (client *Client) SendLoad() error {
@@ -64,15 +63,16 @@ func (client *Client) sendLoad() {
 			if client.Closed() {
 				return
 			}
-			err := client.SendLoad()
-			if err != nil {
+			client.lastErr = client.SendLoad()
+			if client.lastErr != nil {
 				client.pausedCond.L.Lock()
 				defer client.pausedCond.L.Unlock()
 				if client.Closed() {
+					client.lastErr = nil
 					return
+				} else {
+					client.pause(false)
 				}
-				client.lastErr = err
-				client.pause(false)
 			}
 			if client.waitTime == 0 {
 				client.waitTime = 1 * time.Second

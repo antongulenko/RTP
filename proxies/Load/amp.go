@@ -131,9 +131,7 @@ func (server *LoadServer) newStreamSession(desc *amp.StartStream) (*loadSession,
 	if err != nil {
 		load = DefaultLoad
 	}
-	if err := client.SetPayload(server.PayloadSize); err != nil {
-		server.LogError(err)
-	}
+	client.SetPayload(server.PayloadSize)
 	return &loadSession{
 		client: client,
 		load:   uint64(load),

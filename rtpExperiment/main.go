@@ -125,8 +125,8 @@ func startStream(target_ip string, rtp_port int) {
 	if use_amp {
 		log.Println("Starting stream using AMP at", amp_url)
 		client, err := amp.NewClientFor(amp_url)
-		client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 		Checkerr(err)
+		client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 		Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
 		observees.AddNamed("stream", CleanupObservee(func() {
 			Printerr(client.StopStream(target_ip, rtp_port))
