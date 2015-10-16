@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -220,9 +221,10 @@ func printStatistics() {
 		}))
 }
 
-func main() {
-	parseFlags()
-	ExitHook = stopObservees
+func startScenarios() {
+	// Give priority to this goroutine to quickly start all experiments
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	for i := 0; i < num_clients; i++ {
 		startScenario()
@@ -230,6 +232,12 @@ func main() {
 	if print_stats {
 		printStatistics()
 	}
+}
+
+func main() {
+	parseFlags()
+	ExitHook = stopObservees
+	startScenarios()
 
 	if close_stdin {
 		log.Println("Press Ctrl-D to interrupt")
