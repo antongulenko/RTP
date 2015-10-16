@@ -164,8 +164,9 @@ func (inst *serverProtocolInstance) HandleServerPacket(packet *Packet) *Packet {
 	code := packet.Code
 	handler, ok := inst.handlers[code]
 	if !ok {
-		inst.server.LogError(fmt.Errorf("Packet code %v not handled %v", code, inst.Name()))
-		return nil
+		err := fmt.Errorf("Packet code %v not handled %v", code, inst.Name())
+		inst.server.LogError(err)
+		return inst.server.ReplyError(err)
 	} else {
 		return handler(packet)
 	}
