@@ -72,7 +72,7 @@ func (client *Client) sendLoad() {
 					client.lastErr = nil
 					return
 				} else {
-					client.Pause()
+					client.pause(false)
 				}
 			}
 			if client.waitTime == 0 {
@@ -87,14 +87,26 @@ func (client *Client) sendLoad() {
 }
 
 func (client *Client) Pause() {
-	client.pausedCond.L.Lock()
-	defer client.pausedCond.L.Unlock()
-	client.paused = true
+	client.pause(true)
 }
 
 func (client *Client) Resume() {
-	client.pausedCond.L.Lock()
-	defer client.pausedCond.L.Unlock()
+	client.resume(true)
+}
+
+func (client *Client) pause(lock bool) {
+	if lock {
+		client.pausedCond.L.Lock()
+		defer client.pausedCond.L.Unlock()
+	}
+	client.paused = true
+}
+
+func (client *Client) resume(lock bool) {
+	if lock {
+		client.pausedCond.L.Lock()
+		defer client.pausedCond.L.Unlock()
+	}
 	client.paused = false
 	client.pausedCond.Broadcast()
 }
@@ -112,7 +124,7 @@ func (client *Client) Close() error {
 	client.pausedCond.L.Lock()
 	defer client.pausedCond.L.Unlock()
 	err.Add(client.Client.Close())
-	client.Resume()
+	client.resume(false)
 	err.Add(client.lastErr)
 	return err.NilOrError()
 }
