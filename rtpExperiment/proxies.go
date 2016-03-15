@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols/pcp"
 	"github.com/antongulenko/RTP/proxies"
+	"github.com/antongulenko/golib"
 )
 
 func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
@@ -16,7 +16,7 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	listen := net.JoinHostPort(rtp_ip, strconv.Itoa(listenPort))
 	target := net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
 	p, err := proxies.NewUdpProxy(listen, target)
-	Checkerr(err)
+	golib.Checkerr(err)
 	p.Start()
 	log.Printf("UDP proxy started: %s\n", p)
 	return p
@@ -24,7 +24,7 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 
 func pcpProxyIp() string {
 	proxy_ip, _, err := net.SplitHostPort(pcp_url)
-	Checkerr(err)
+	golib.Checkerr(err)
 	return proxy_ip
 }
 
@@ -35,11 +35,11 @@ func pcpProxyAddrs(listenPort, targetPort int) (listen, target string) {
 }
 
 func makeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Checkerr(client.StartProxy(pcpProxyAddrs(listenPort, targetPort)))
+	golib.Checkerr(client.StartProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
 func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
-	Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
+	golib.Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
 func startProxies(rtp_port int) (string, int) {
@@ -49,20 +49,20 @@ func startProxies(rtp_port int) (string, int) {
 			proxy_ip = pcpProxyIp()
 			client, err := pcp.NewClientFor(pcp_url)
 			client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
-			Checkerr(err)
+			golib.Checkerr(err)
 			log.Printf("Starting external proxies using %v\n", client)
 			makeProxyPCP(client, proxy_port, rtp_port)
 			makeProxyPCP(client, proxy_port+1, rtp_port+1)
-			observees.AddNamed("proxy", CleanupObservee(func() {
+			observees.AddNamed("proxy", golib.CleanupObservee(func() {
 				closeProxyPCP(client, proxy_port, rtp_port)
 				closeProxyPCP(client, proxy_port+1, rtp_port+1)
-				Printerr(client.Close())
+				golib.Printerr(client.Close())
 			}))
 		} else {
 			proxy1 := makeProxy(proxy_port, rtp_port)
 			proxy2 := makeProxy(proxy_port+1, rtp_port+1)
 			statistics = append(statistics, proxy1.Stats, proxy2.Stats)
-			observees.AddNamed("proxy", proxy1, proxy2, CleanupObservee(func() {
+			observees.AddNamed("proxy", proxy1, proxy2, golib.CleanupObservee(func() {
 				if proxy1.Err != nil {
 					log.Printf("Proxy %v error: %v\n", proxy_port, proxy1.Err)
 				}

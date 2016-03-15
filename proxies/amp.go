@@ -9,11 +9,11 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/amp_control"
 	"github.com/antongulenko/RTP/rtpClient"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -27,14 +27,14 @@ type AmpProxy struct {
 	rtspURL   *url.URL
 	proxyHost string
 
-	StreamStartedCallback func(rtsp *helpers.Command, proxies []*UdpProxy)
-	StreamStoppedCallback func(rtsp *helpers.Command, proxies []*UdpProxy)
+	StreamStartedCallback func(rtsp *golib.Command, proxies []*UdpProxy)
+	StreamStoppedCallback func(rtsp *golib.Command, proxies []*UdpProxy)
 }
 
 type streamSession struct {
 	*protocols.SessionBase
 
-	backend   *helpers.Command
+	backend   *golib.Command
 	rtpProxy  *UdpProxy
 	rtcpProxy *UdpProxy
 	port      int
@@ -196,8 +196,8 @@ func (session *streamSession) proxies() []*UdpProxy {
 	return []*UdpProxy{session.rtpProxy, session.rtcpProxy}
 }
 
-func (session *streamSession) Observees() []helpers.Observee {
-	return []helpers.Observee{
+func (session *streamSession) Observees() []golib.Observee {
+	return []golib.Observee{
 		session.rtpProxy,
 		session.rtcpProxy,
 		session.backend,
@@ -226,7 +226,7 @@ func (session *streamSession) Start(base *protocols.SessionBase) {
 }
 
 func (session *streamSession) Cleanup() {
-	var errors helpers.MultiError
+	var errors golib.MultiError
 	for _, p := range session.proxies() {
 		if p.Err != nil {
 			errors = append(errors, fmt.Errorf("Proxy %s error: %v", p, p.Err))

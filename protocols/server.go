@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 )
 
 type Server struct {
-	stopped  *helpers.OneshotCondition
+	stopped  *golib.OneshotCondition
 	listener Listener
 	errors   chan error
 
@@ -32,7 +32,7 @@ func NewServer(addr_string string, protocol Protocol) (*Server, error) {
 	server := &Server{
 		Wg:      new(sync.WaitGroup),
 		errors:  make(chan error, ErrorChanBuffer),
-		stopped: helpers.NewOneshotCondition(),
+		stopped: golib.NewOneshotCondition(),
 	}
 	var err error
 	server.protocol, err = protocol.instantiateServer(server)

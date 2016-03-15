@@ -4,8 +4,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/stats"
+	"github.com/antongulenko/golib"
 	"github.com/antongulenko/gortp"
 )
 
@@ -16,7 +16,7 @@ const (
 
 type RtpClient struct {
 	wg      sync.WaitGroup
-	stopped *helpers.OneshotCondition
+	stopped *golib.OneshotCondition
 
 	listenPort     int
 	sequenceNumber uint16
@@ -55,7 +55,7 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 		RtpSession:   session,
 		ctrlChan:     session.CreateCtrlEventChan(rtpCtrlBuffer),
 		dataChan:     session.CreateDataReceiveChan(rtpDataBuffer),
-		stopped:      helpers.NewOneshotCondition(),
+		stopped:      golib.NewOneshotCondition(),
 	}
 
 	client.wg.Add(1)

@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/golib"
 )
 
 // ======================= Server for receiving heartbeats =======================
@@ -164,7 +164,7 @@ func (detector *HeartbeatFaultDetector) Start() {
 }
 
 func (detector *HeartbeatFaultDetector) Close() error {
-	var err helpers.MultiError
+	var err golib.MultiError
 	detector.Closed.Enable(func() {
 		delete(detector.server.detectors, detector.token)
 		// Notify remote server to stop sending heartbeats.

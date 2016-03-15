@@ -7,13 +7,13 @@ import (
 	"log"
 	"time"
 
-	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/balancer"
 	"github.com/antongulenko/RTP/protocols/heartbeat"
 	"github.com/antongulenko/RTP/protocols/ping"
 	"github.com/antongulenko/RTP/proxies/amp_balancer"
+	"github.com/antongulenko/golib"
 )
 
 var (
@@ -70,12 +70,12 @@ func main() {
 	heartbeat_timeout := time.Duration(*_heartbeat_timeout) * time.Millisecond
 
 	var detector_factory balancer.FaultDetectorFactory
-	observees := NewObserveeGroup()
+	observees := golib.NewObserveeGroup()
 	var heartbeatServer *heartbeat.HeartbeatServer
 	if *useHeartbeat {
 		var err error
 		heartbeatServer, err = heartbeat.NewHeartbeatServer(heartbeat_server)
-		Checkerr(err)
+		golib.Checkerr(err)
 		go printServerErrors("Heartbeat", heartbeatServer.Server)
 		log.Println("Listening for Heartbeats on", heartbeatServer.LocalAddr())
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
@@ -94,11 +94,11 @@ func main() {
 	}
 
 	protocol, err := protocols.NewProtocol("AMP", amp.Protocol, ping.Protocol, heartbeat.Protocol)
-	Checkerr(err)
+	golib.Checkerr(err)
 	baseServer, err := protocols.NewServer(amp_addr, protocol)
-	Checkerr(err)
+	golib.Checkerr(err)
 	server, err := amp_balancer.RegisterPluginServer(baseServer)
-	Checkerr(err)
+	golib.Checkerr(err)
 	observees.AddNamed("server", server)
 
 	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
@@ -109,17 +109,17 @@ func main() {
 	if *loadBackend {
 		for _, load := range load_servers {
 			err := ampPlugin.AddBackendServer(load, stateChangePrinter)
-			Checkerr(err)
+			golib.Checkerr(err)
 		}
 	} else {
 		for _, amp := range amp_servers {
 			err := ampPlugin.AddBackendServer(amp, stateChangePrinter)
-			Checkerr(err)
+			golib.Checkerr(err)
 		}
 	}
 	for _, pcp := range pcp_servers {
 		err := pcpPlugin.AddBackendServer(pcp, stateChangePrinter)
-		Checkerr(err)
+		golib.Checkerr(err)
 	}
 
 	go printServerErrors("Server", server.Server)
@@ -134,6 +134,6 @@ func main() {
 		heartbeatServer.Start()
 	}
 
-	observees.Add(&NoopObservee{ExternalInterrupt(), "external interrupt"})
+	observees.Add(&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"})
 	observees.WaitAndStop(nil)
 }

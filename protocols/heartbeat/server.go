@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/golib"
 )
 
 // ======================= Receiving heartbeats =======================
@@ -37,7 +37,7 @@ type serverState struct {
 	*protocols.Server
 	token            int64
 	heartbeatClient  protocols.Client
-	heartbeatRunning *helpers.OneshotCondition
+	heartbeatRunning *golib.OneshotCondition
 	heartbeatTimeout time.Duration
 	heartbeatSeq     uint64
 }
@@ -45,7 +45,7 @@ type serverState struct {
 func (proto *heartbeatProtocol) ServerHandlers(server *protocols.Server) protocols.ServerHandlerMap {
 	state := &serverState{
 		Server:           server,
-		heartbeatRunning: helpers.NewOneshotCondition(),
+		heartbeatRunning: golib.NewOneshotCondition(),
 	}
 	return protocols.ServerHandlerMap{
 		codeConfigureHeartbeat: state.handleConfigureHeartbeat,

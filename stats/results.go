@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -28,7 +28,7 @@ type Results struct {
 
 	runningAverage  bool
 	startOnce       sync.Once
-	stopped         *helpers.OneshotCondition
+	stopped         *golib.OneshotCondition
 	incomingPackets chan packet
 
 	totalPackets uint
@@ -40,7 +40,7 @@ func NewResults() *Results {
 	return &Results{
 		packets:        list.New(),
 		startTimestamp: time.Now(),
-		stopped:        helpers.NewOneshotCondition(),
+		stopped:        golib.NewOneshotCondition(),
 	}
 }
 

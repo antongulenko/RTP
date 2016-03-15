@@ -5,11 +5,11 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/amp_control"
 	"github.com/antongulenko/RTP/protocols/load"
+	"github.com/antongulenko/golib"
 )
 
 var (
@@ -138,7 +138,7 @@ func (server *LoadServer) newStreamSession(desc *amp.StartStream) (*loadSession,
 	}, nil
 }
 
-func (session *loadSession) Observees() []helpers.Observee {
+func (session *loadSession) Observees() []golib.Observee {
 	return nil
 }
 

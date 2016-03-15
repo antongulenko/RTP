@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -36,7 +36,7 @@ type client struct {
 	conn       Conn
 
 	protocol Protocol
-	closed   *helpers.OneshotCondition
+	closed   *golib.OneshotCondition
 
 	// TODO use lock
 	connLock sync.Mutex
@@ -48,7 +48,7 @@ type client struct {
 func NewClient(protocol Protocol) Client {
 	return &client{
 		protocol: protocol,
-		closed:   helpers.NewOneshotCondition(),
+		closed:   golib.NewOneshotCondition(),
 		timeout:  DefaultTimeout,
 	}
 }

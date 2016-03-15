@@ -10,7 +10,12 @@ import (
 )
 
 const (
-	CodeMeasureLatency = protocols.CodeOther + iota
+	CodeMeasureLatency = protocols.Code(20)
+)
+
+var (
+	Protocol     *latencyProtocol
+	MiniProtocol = protocols.NewMiniProtocol(Protocol)
 )
 
 type MeasureLatency struct {
@@ -18,44 +23,50 @@ type MeasureLatency struct {
 	SendTime time.Time
 }
 
-type LatencyProtocol struct {
+type latencyProtocol struct {
 }
 
-func (*LatencyProtocol) Name() string {
+func (*latencyProtocol) Name() string {
 	return "Latency"
 }
 
-func (*LatencyProtocol) DefaultBufferSize() uint {
+func (*latencyProtocol) DefaultBufferSize() uint {
 	return 256
 }
 
-func (*LatencyProtocol) DecodeValue(code uint, dec *gob.Decoder) (interface{}, error) {
-	switch code {
-	case CodeMeasureLatency:
-		var val MeasureLatency
-		err := dec.Decode(&val)
-		if err != nil {
-			return nil, fmt.Errorf("Error decoding MeasureLatency value: %v", err)
-		}
-		return &val, nil
-	default:
-		return nil, fmt.Errorf("Unknown Latency code: %v", code)
+func (proto *latencyProtocol) Decoders() protocols.DecoderMap {
+	return protocols.DecoderMap{
+		CodeMeasureLatency: proto.decodeMeasureLatency,
 	}
+}
+
+func (proto *latencyProtocol) decodeMeasureLatency(dec *gob.Decoder) (interface{}, error) {
+	var val MeasureLatency
+	err := dec.Decode(&val)
+	if err != nil {
+		return nil, fmt.Errorf("Error decoding MeasureLatency value: %v", err)
+	}
+	return &val, nil
 }
 
 type Client struct {
-	protocols.ExtendedClient
-	*LatencyProtocol
+	protocols.Client
 	Sequence uint
 }
 
-func NewClient(local_ip string) (client *Client, err error) {
-	client = new(Client)
-	client.ExtendedClient, err = protocols.NewExtendedClient(local_ip, client)
-	if err != nil {
-		client = nil
+func NewClient(client protocols.Client) (*Client, error) {
+	if err := client.Protocol().CheckIncludesFragment(Protocol.Name()); err != nil {
+		return nil, err
 	}
-	return
+	return &Client{client, 0}, nil
+}
+
+func NewClientFor(server_addr string) (*Client, error) {
+	client, err := protocols.NewMiniClientFor(server_addr, Protocol)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{client, 0}, nil
 }
 
 func (client *Client) SendMeasureLatency() error {
@@ -73,45 +84,34 @@ func (client *Client) SendMeasureLatency() error {
 
 type Server struct {
 	*protocols.Server
-	*LatencyProtocol
 	Sequence uint
 }
 
 func NewServer(local_addr string) (server *Server, err error) {
 	server = new(Server)
-	server.Server, err = protocols.NewServer(local_addr, server)
+	server.Server, err = protocols.NewServer(local_addr, MiniProtocol)
+	server.Server.RegisterHandlers(protocols.ServerHandlerMap{
+		CodeMeasureLatency: server.HandleMeasureLatency,
+	})
 	if err != nil {
 		server = nil
 	}
 	return
 }
 
-func (server *Server) StopServer() {
-	// Nothing
-}
-
-func (server *Server) HandleRequest(packet *protocols.Packet) {
-	val := packet.Val
-	switch packet.Code {
-	case CodeMeasureLatency:
-		if latencyPacket, ok := val.(*MeasureLatency); ok {
-			server.MeasureLatencyReceived(latencyPacket)
-			server.ReplyOK(packet)
-		} else {
-			server.ReplyError(packet, fmt.Errorf("Illegal value for MeasureLatency: %v", packet.Val))
+func (server *Server) HandleMeasureLatency(incoming *protocols.Packet) *protocols.Packet {
+	if packet, ok := incoming.Val.(*MeasureLatency); ok {
+		received := time.Now()
+		latency := received.Sub(packet.SendTime)
+		seq := packet.Sequence
+		if seq != server.Sequence {
+			log.Println("Sequence jump from", server.Sequence, "to", seq)
 		}
-	default:
-		server.LogError(fmt.Errorf("Received unexpected code: %v", packet.Code))
+		server.Sequence = seq + 1
+		log.Printf("Seq. %v, latency: %s\n", seq, latency)
+		return server.ReplyOK()
+	} else {
+		return server.ReplyError(fmt.Errorf("Illegal value for MeasureLatency: %v", incoming.Val))
 	}
-}
 
-func (server *Server) MeasureLatencyReceived(packet *MeasureLatency) {
-	received := time.Now()
-	latency := received.Sub(packet.SendTime)
-	seq := packet.Sequence
-	if seq != server.Sequence {
-		log.Println("Sequence jump from", server.Sequence, "to", seq)
-	}
-	server.Sequence = seq + 1
-	log.Printf("Seq. %v, latency: %s\n", seq, latency)
 }

@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -18,18 +18,18 @@ func main() {
 	target_addr := flag.String("target", default_target, "The partner to exchange latency measurement packets with")
 	local_addr := protocols.ParseServerFlags("0.0.0.0", 6060)
 	local_host, _, err := net.SplitHostPort(local_addr)
-	Checkerr(err)
+	golib.Checkerr(err)
 
 	server, err := NewServer(local_addr)
-	Checkerr(err)
-	client, err := NewClient(local_host)
-	Checkerr(err)
+	golib.Checkerr(err)
+	client, err := NewClientFor(local_host)
+	golib.Checkerr(err)
 	err = client.SetServer(*target_addr)
-	Checkerr(err)
+	golib.Checkerr(err)
 
 	server.Start()
 
-	stopSending := NewOneshotCondition()
+	stopSending := golib.NewOneshotCondition()
 	go func() {
 		for !stopSending.Enabled() {
 			err := client.SendMeasureLatency()
@@ -42,8 +42,8 @@ func main() {
 
 	log.Println("Listening to Latency on " + local_addr + ", sending to: " + *target_addr)
 	log.Println("Press Ctrl-C to close")
-	WaitAndStopObservees(nil, []Observee{
+	golib.NewObserveeGroup(
 		server, stopSending,
-		&NoopObservee{ExternalInterrupt(), "external interrupt"},
-	})
+		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
+	).WaitAndStop(nil)
 }

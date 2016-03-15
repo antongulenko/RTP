@@ -4,28 +4,28 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 type Sessions map[interface{}]*SessionBase
 
 type SessionBase struct {
 	Wg         *sync.WaitGroup
-	Stopped    *helpers.OneshotCondition
+	Stopped    *golib.OneshotCondition
 	CleanupErr error
 	Session    Session
 }
 
 type Session interface {
 	Start(base *SessionBase)
-	Observees() []helpers.Observee
+	Observees() []golib.Observee
 	Cleanup()
 }
 
 func (sessions Sessions) StartSession(key interface{}, session Session) {
 	base := &SessionBase{
 		Wg:      new(sync.WaitGroup),
-		Stopped: helpers.NewOneshotCondition(),
+		Stopped: golib.NewOneshotCondition(),
 		Session: session,
 	}
 	sessions[key] = base
@@ -59,7 +59,7 @@ func (sessions Sessions) ReKeySession(oldKey, newKey interface{}) (*SessionBase,
 }
 
 func (sessions Sessions) DeleteSessions() error {
-	errors := make(helpers.MultiError, 0, len(sessions))
+	errors := make(golib.MultiError, 0, len(sessions))
 	for key, session := range sessions {
 		if err := session.StopAndFormatError(); err != nil {
 			errors = append(errors, err)
@@ -109,7 +109,7 @@ func (base *SessionBase) observe() {
 		return
 	}
 	go func() {
-		helpers.WaitForAnyObservee(base.Wg, base.Session.Observees())
+		golib.WaitForAnyObservee(base.Wg, base.Session.Observees())
 		base.Stop()
 	}()
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -43,7 +43,7 @@ type FaultDetectorBase struct {
 	callbacks      []faultDetectorCallbackData
 	lastErr        error
 	observedServer observedServer
-	Closed         *helpers.OneshotCondition
+	Closed         *golib.OneshotCondition
 }
 
 func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetectorBase {
@@ -53,7 +53,7 @@ func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetector
 			observedProtocol,
 			server,
 		},
-		Closed: helpers.NewOneshotCondition(),
+		Closed: golib.NewOneshotCondition(),
 	}
 }
 

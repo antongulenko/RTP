@@ -5,9 +5,9 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/pcp"
+	"github.com/antongulenko/golib"
 )
 
 type PcpProxy struct {
@@ -107,8 +107,8 @@ func (proxy *PcpProxy) StopProxyPair(val *pcp.StopProxyPair) error {
 	return proxy.sessions.DeleteSession(val.ProxyPort1)
 }
 
-func (session *udpSession) Observees() []helpers.Observee {
-	result := []helpers.Observee{session.udp}
+func (session *udpSession) Observees() []golib.Observee {
+	result := []golib.Observee{session.udp}
 	if session.udp2 != nil {
 		result = append(result, session.udp2)
 	}
@@ -130,7 +130,7 @@ func (session *udpSession) Start(base *protocols.SessionBase) {
 }
 
 func (session *udpSession) Cleanup() {
-	var errors helpers.MultiError
+	var errors golib.MultiError
 	if session.udp.Err != nil {
 		errors = append(errors, fmt.Errorf("UDP proxy %v error: %v", session.udp, session.udp.Err))
 	}

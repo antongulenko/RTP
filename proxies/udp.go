@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/stats"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -45,7 +45,7 @@ type UdpProxy struct {
 	targetConn *net.UDPConn
 	targetAddr *net.UDPAddr
 
-	proxyClosed    *helpers.OneshotCondition
+	proxyClosed    *golib.OneshotCondition
 	packets        chan []byte
 	targetConnLock sync.Mutex
 
@@ -89,7 +89,7 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 		targetConn:      targetConn,
 		targetAddr:      targetUDP,
 		packets:         make(chan []byte, BufferedPackets),
-		proxyClosed:     helpers.NewOneshotCondition(),
+		proxyClosed:     golib.NewOneshotCondition(),
 		writeErrors:     make(chan error, buf_write_errors),
 		Stats:           stats.NewStats("UDP Proxy " + listenAddr),
 		OnError:         OnErrorClose,

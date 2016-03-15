@@ -4,12 +4,12 @@ import (
 	"flag"
 	"log"
 
-	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/amp_control"
 	"github.com/antongulenko/RTP/protocols/heartbeat"
 	"github.com/antongulenko/RTP/protocols/ping"
+	"github.com/antongulenko/golib"
 )
 
 func printErrors(server *protocols.Server) {
@@ -23,11 +23,11 @@ func main() {
 	amp_addr := protocols.ParseServerFlags("0.0.0.0", 7770)
 
 	proto, err := protocols.NewProtocol("AMP/Load", amp.Protocol, amp_control.Protocol, ping.Protocol, heartbeat.Protocol)
-	Checkerr(err)
+	golib.Checkerr(err)
 	server, err := protocols.NewServer(amp_addr, proto)
-	Checkerr(err)
+	golib.Checkerr(err)
 	loadServer, err := RegisterLoadServer(server)
-	Checkerr(err)
+	golib.Checkerr(err)
 	loadServer.PayloadSize = *payloadSize
 
 	go printErrors(server)
@@ -35,8 +35,8 @@ func main() {
 
 	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
-	NewObserveeGroup(
+	golib.NewObserveeGroup(
 		server,
-		&NoopObservee{ExternalInterrupt(), "external interrupt"},
+		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
 	).WaitAndStop(nil)
 }

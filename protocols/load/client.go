@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/golib"
 )
 
 type Client struct {
@@ -119,7 +119,7 @@ func (client *Client) waitWhilePaused() {
 }
 
 func (client *Client) Close() error {
-	var err helpers.MultiError
+	var err golib.MultiError
 	client.pausedCond.L.Lock()
 	defer client.pausedCond.L.Unlock()
 	err.Add(client.Client.Close())

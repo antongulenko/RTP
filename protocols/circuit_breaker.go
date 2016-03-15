@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -42,7 +42,7 @@ func NewCircuitBreaker(client Client, detector FaultDetector) (CircuitBreaker, e
 }
 
 func (breaker *circuitBreaker) Close() error {
-	var err helpers.MultiError
+	var err golib.MultiError
 	err.Add(breaker.client.Close())
 	err.Add(breaker.FaultDetector.Close())
 	return err.NilOrError()

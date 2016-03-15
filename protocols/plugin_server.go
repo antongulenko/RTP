@@ -5,7 +5,7 @@ package protocols
 import (
 	"fmt"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 type PluginServer struct {
@@ -37,7 +37,7 @@ type PluginSession struct {
 
 type PluginSessionHandler interface {
 	Start(sendingSession PluginSessionHandler)
-	Observees() []helpers.Observee
+	Observees() []golib.Observee
 	Cleanup() error
 	String() string
 }
@@ -103,7 +103,7 @@ func (server *PluginServer) DeleteSession(client string) error {
 	return server.sessions.DeleteSession(client)
 }
 
-func (session *PluginSession) Observees() (result []helpers.Observee) {
+func (session *PluginSession) Observees() (result []golib.Observee) {
 	for _, plugin := range session.Plugins {
 		result = append(result, plugin.Observees()...)
 	}
@@ -125,7 +125,7 @@ func (session *PluginSession) Start(base *SessionBase) {
 }
 
 func (session *PluginSession) cleanupPlugins() error {
-	var errors helpers.MultiError
+	var errors golib.MultiError
 	for _, plugin := range session.Plugins {
 		if plugin != nil {
 			if err := plugin.Cleanup(); err != nil {

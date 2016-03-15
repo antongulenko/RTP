@@ -3,7 +3,7 @@ package rtpClient
 import (
 	"strconv"
 
-	"github.com/antongulenko/RTP/helpers"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -11,7 +11,7 @@ const (
 	logfile_dir = "openRTSP-logs"
 )
 
-func StartRtspClient(rtspUrl string, port int, logfile string) (*helpers.Command, error) {
+func StartRtspClient(rtspUrl string, port int, logfile string) (*golib.Command, error) {
 	rtsp_params := []string{"-v", "-r", "-p", strconv.Itoa(port), rtspUrl}
-	return helpers.StartCommand(rtsp_exe, rtsp_params, "openRTSP", logfile_dir, logfile)
+	return golib.StartCommand(rtsp_exe, rtsp_params, "openRTSP", logfile_dir, logfile)
 }

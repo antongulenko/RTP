@@ -5,12 +5,12 @@ package main
 import (
 	"log"
 
-	. "github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/heartbeat"
 	"github.com/antongulenko/RTP/protocols/pcp"
 	"github.com/antongulenko/RTP/protocols/ping"
 	"github.com/antongulenko/RTP/proxies"
+	"github.com/antongulenko/golib"
 )
 
 func printPcpErrors(proxy *proxies.PcpProxy) {
@@ -32,11 +32,11 @@ func main() {
 	pcp_addr := protocols.ParseServerFlags("0.0.0.0", 7778)
 
 	proto, err := protocols.NewProtocol("PCP", pcp.Protocol, ping.Protocol, heartbeat.Protocol)
-	Checkerr(err)
+	golib.Checkerr(err)
 	server, err := protocols.NewServer(pcp_addr, proto)
-	Checkerr(err)
+	golib.Checkerr(err)
 	proxy, err := proxies.RegisterPcpProxy(server)
-	Checkerr(err)
+	golib.Checkerr(err)
 
 	go printPcpErrors(proxy)
 	proxy.ProxyStartedCallback = proxyStarted
@@ -45,8 +45,8 @@ func main() {
 
 	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
-	NewObserveeGroup(
+	golib.NewObserveeGroup(
 		proxy,
-		&NoopObservee{ExternalInterrupt(), "external interrupt"},
+		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
 	).WaitAndStop(nil)
 }

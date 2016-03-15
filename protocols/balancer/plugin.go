@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/antongulenko/RTP/helpers"
 	"github.com/antongulenko/RTP/protocols"
+	"github.com/antongulenko/golib"
 )
 
 const (
@@ -120,7 +120,7 @@ func (plugin *BalancingPlugin) NewSession(param protocols.SessionParameter) (pro
 }
 
 func (plugin *BalancingPlugin) Stop() error {
-	var errors helpers.MultiError
+	var errors golib.MultiError
 	for _, server := range plugin.BackendServers {
 		if err := server.Client.Close(); err != nil {
 			errors = append(errors, fmt.Errorf("Error closing connection to %s: %v", server.Client, err))
@@ -161,7 +161,7 @@ func (session *BalancingSession) Start(sendingSession protocols.PluginSessionHan
 	// Nothing else to do. BalancingSession.NewSession() fully starts the session.
 }
 
-func (session *BalancingSession) Observees() []helpers.Observee {
+func (session *BalancingSession) Observees() []golib.Observee {
 	return nil // No observees
 }
 
