@@ -17,7 +17,6 @@ func makeProxy(listenPort, targetPort int) *proxies.UdpProxy {
 	target := net.JoinHostPort(rtp_ip, strconv.Itoa(targetPort))
 	p, err := proxies.NewUdpProxy(listen, target)
 	golib.Checkerr(err)
-	p.Start()
 	log.Printf("UDP proxy started: %s\n", p)
 	return p
 }
@@ -53,23 +52,23 @@ func startProxies(rtp_port int) (string, int) {
 			log.Printf("Starting external proxies using %v\n", client)
 			makeProxyPCP(client, proxy_port, rtp_port)
 			makeProxyPCP(client, proxy_port+1, rtp_port+1)
-			observees.AddNamed("proxy", golib.CleanupObservee(func() {
+			tasks.AddNamed("proxy", &golib.CleanupTask{Cleanup: func() {
 				closeProxyPCP(client, proxy_port, rtp_port)
 				closeProxyPCP(client, proxy_port+1, rtp_port+1)
 				golib.Printerr(client.Close())
-			}))
+			}})
 		} else {
 			proxy1 := makeProxy(proxy_port, rtp_port)
 			proxy2 := makeProxy(proxy_port+1, rtp_port+1)
 			statistics = append(statistics, proxy1.Stats, proxy2.Stats)
-			observees.AddNamed("proxy", proxy1, proxy2, golib.CleanupObservee(func() {
+			tasks.AddNamed("proxy", proxy1, proxy2, &golib.CleanupTask{Cleanup: func() {
 				if proxy1.Err != nil {
 					log.Printf("Proxy %v error: %v\n", proxy_port, proxy1.Err)
 				}
 				if proxy2.Err != nil {
 					log.Printf("Proxy %v error: %v\n", proxy_port+1, proxy2.Err)
 				}
-			}))
+			}})
 		}
 	}
 	return proxy_ip, proxy_port

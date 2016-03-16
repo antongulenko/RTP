@@ -27,23 +27,21 @@ func main() {
 	err = client.SetServer(*target_addr)
 	golib.Checkerr(err)
 
-	server.Start()
-
-	stopSending := golib.NewOneshotCondition()
-	go func() {
-		for !stopSending.Enabled() {
-			err := client.SendMeasureLatency()
-			if err != nil {
-				log.Println("Error sending Latency packet:", err)
-			}
-			time.Sleep(1 * time.Second)
+	measureLatency := golib.LoopTask(func(stop <-chan interface{}) {
+		err := client.SendMeasureLatency()
+		if err != nil {
+			log.Println("Error sending Latency packet:", err)
 		}
-	}()
+		select {
+		case <-time.After(1 * time.Second):
+		case <-stop:
+		}
+	})
 
 	log.Println("Listening to Latency on " + local_addr + ", sending to: " + *target_addr)
 	log.Println("Press Ctrl-C to close")
-	golib.NewObserveeGroup(
-		server, stopSending,
-		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
-	).WaitAndStop(nil)
+	golib.NewTaskGroup(
+		server, measureLatency,
+		&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"},
+	).WaitAndStop()
 }

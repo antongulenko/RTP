@@ -47,12 +47,11 @@ func main() {
 	go printAmpErrors(proxy)
 	proxy.StreamStartedCallback = printRtspStart
 	proxy.StreamStoppedCallback = printRtspStop
-	server.Start()
 
 	log.Println("Listening:", server, "Backend URL:", rtsp_url)
 	log.Println("Press Ctrl-D to close")
-	golib.NewObserveeGroup(
+	golib.NewTaskGroup(
 		server,
-		&golib.NoopObservee{golib.StdinClosed(), "stdin closed"},
-	).WaitAndStop(nil)
+		&golib.NoopTask{golib.StdinClosed(), "stdin closed"},
+	).WaitAndStop()
 }

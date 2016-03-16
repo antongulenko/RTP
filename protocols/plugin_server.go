@@ -37,7 +37,7 @@ type PluginSession struct {
 
 type PluginSessionHandler interface {
 	Start(sendingSession PluginSessionHandler)
-	Observees() []golib.Observee
+	Tasks() []golib.Task
 	Cleanup() error
 	String() string
 }
@@ -103,9 +103,9 @@ func (server *PluginServer) DeleteSession(client string) error {
 	return server.sessions.DeleteSession(client)
 }
 
-func (session *PluginSession) Observees() (result []golib.Observee) {
+func (session *PluginSession) Tasks() (result []golib.Task) {
 	for _, plugin := range session.Plugins {
-		result = append(result, plugin.Observees()...)
+		result = append(result, plugin.Tasks()...)
 	}
 	return
 }

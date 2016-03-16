@@ -31,12 +31,11 @@ func main() {
 	loadServer.PayloadSize = *payloadSize
 
 	go printErrors(server)
-	server.Start()
 
 	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
-	golib.NewObserveeGroup(
+	golib.NewTaskGroup(
 		server,
-		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
-	).WaitAndStop(nil)
+		&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"},
+	).WaitAndStop()
 }

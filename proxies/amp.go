@@ -196,30 +196,27 @@ func (session *streamSession) proxies() []*UdpProxy {
 	return []*UdpProxy{session.rtpProxy, session.rtcpProxy}
 }
 
-func (session *streamSession) Observees() []golib.Observee {
-	return []golib.Observee{
+func (session *streamSession) Tasks() []golib.Task {
+	errors1 := session.rtpProxy.WriteErrors()
+	errors2 := session.rtcpProxy.WriteErrors()
+	return []golib.Task{
 		session.rtpProxy,
 		session.rtcpProxy,
 		session.backend,
-	}
-}
-
-func (session *streamSession) Start(base *protocols.SessionBase) {
-	session.SessionBase = base
-	go func() {
-		errors1 := session.rtpProxy.WriteErrors()
-		errors2 := session.rtcpProxy.WriteErrors()
-		for {
+		golib.LoopTask(func(stop <-chan interface{}) {
 			select {
 			case err := <-errors1:
 				session.proxy.LogError(fmt.Errorf("RTP %v write error: %v", session.rtpProxy, err))
 			case err := <-errors2:
 				session.proxy.LogError(fmt.Errorf("RTCP %v write error: %v", session.rtcpProxy, err))
+			case <-stop:
 			}
-		}
-	}()
-	session.rtpProxy.Start()
-	session.rtcpProxy.Start()
+		}),
+	}
+}
+
+func (session *streamSession) Start(base *protocols.SessionBase) {
+	session.SessionBase = base
 	if session.proxy.StreamStartedCallback != nil {
 		session.proxy.StreamStartedCallback(session.backend, session.proxies())
 	}

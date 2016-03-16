@@ -2,6 +2,7 @@ package heartbeat
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/antongulenko/RTP/protocols"
@@ -35,6 +36,7 @@ func RegisterServerHandler(server *protocols.Server, handler HeartbeatServerHand
 
 type serverState struct {
 	*protocols.Server
+	wg               *sync.WaitGroup
 	token            int64
 	heartbeatClient  protocols.Client
 	heartbeatRunning *golib.OneshotCondition
@@ -94,10 +96,16 @@ func (server *serverState) configureHeartbeat(receiver string, token int64, time
 	return nil
 }
 
+func (server *serverState) Start(wg *sync.WaitGroup) <-chan interface{} {
+	res := server.Server.Start(wg)
+	server.wg = wg
+	return res
+}
+
 func (server *serverState) sendHeartbeats() {
-	server.Wg.Add(1)
+	server.wg.Add(1)
 	go func() {
-		defer server.Wg.Done()
+		defer server.wg.Done()
 		for !server.Stopped {
 			timeout := server.heartbeatTimeout
 			token := server.token

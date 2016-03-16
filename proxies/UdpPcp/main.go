@@ -41,12 +41,11 @@ func main() {
 	go printPcpErrors(proxy)
 	proxy.ProxyStartedCallback = proxyStarted
 	proxy.ProxyStoppedCallback = proxyStopped
-	server.Start()
 
 	log.Println("Listening:", server)
 	log.Println("Press Ctrl-C to close")
-	golib.NewObserveeGroup(
-		proxy,
-		&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"},
-	).WaitAndStop(nil)
+	golib.NewTaskGroup(
+		server,
+		&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"},
+	).WaitAndStop()
 }

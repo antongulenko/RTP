@@ -138,7 +138,7 @@ func (server *LoadServer) newStreamSession(desc *amp.StartStream) (*loadSession,
 	}, nil
 }
 
-func (session *loadSession) Observees() []golib.Observee {
+func (session *loadSession) Tasks() []golib.Task {
 	return nil
 }
 

@@ -121,13 +121,11 @@ func NewUdpProxyPair(listenHost, target1, target2 string) (proxy1 *UdpProxy, pro
 	return
 }
 
-func (proxy *UdpProxy) Start() {
-	go proxy.readPackets()
-	go proxy.forwardPackets()
-}
-
-func (proxy *UdpProxy) Observe(wg *sync.WaitGroup) <-chan interface{} {
-	return proxy.proxyClosed.Observe(wg)
+func (proxy *UdpProxy) Start(wg *sync.WaitGroup) <-chan interface{} {
+	wg.Add(2)
+	go proxy.readPackets(wg)
+	go proxy.forwardPackets(wg)
+	return proxy.proxyClosed.Start(wg)
 }
 
 func (proxy *UdpProxy) Stop() {
@@ -171,7 +169,8 @@ func (proxy *UdpProxy) doclose(err error) {
 	})
 }
 
-func (proxy *UdpProxy) readPackets() {
+func (proxy *UdpProxy) readPackets(wg *sync.WaitGroup) {
+	defer wg.Done()
 	defer close(proxy.packets)
 	for {
 		buf := make([]byte, buf_read_size)
@@ -187,7 +186,8 @@ func (proxy *UdpProxy) readPackets() {
 	}
 }
 
-func (proxy *UdpProxy) forwardPackets() {
+func (proxy *UdpProxy) forwardPackets(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for bytes := range proxy.packets {
 
 		// State for OnErrorRetry

@@ -24,13 +24,11 @@ type Server struct {
 
 	protocol *serverProtocolInstance
 
-	Wg      *sync.WaitGroup
 	Stopped bool
 }
 
 func NewServer(addr_string string, protocol Protocol) (*Server, error) {
 	server := &Server{
-		Wg:      new(sync.WaitGroup),
 		errors:  make(chan error, ErrorChanBuffer),
 		stopped: golib.NewOneshotCondition(),
 	}
@@ -67,13 +65,10 @@ func (server *Server) Errors() <-chan error {
 	return server.errors
 }
 
-func (server *Server) Start() {
-	server.Wg.Add(1)
-	go server.listen()
-}
-
-func (server *Server) Observe(wg *sync.WaitGroup) <-chan interface{} {
-	return server.stopped.Observe(wg)
+func (server *Server) Start(wg *sync.WaitGroup) <-chan interface{} {
+	wg.Add(1)
+	go server.listen(wg)
+	return server.stopped.Start(wg)
 }
 
 func (server *Server) Stop() {
@@ -83,7 +78,6 @@ func (server *Server) Stop() {
 			server.LogError(fmt.Errorf("Error closing listener: %v", err))
 		}
 		server.protocol.stopServer()
-		server.Wg.Wait()
 	})
 }
 
@@ -95,12 +89,9 @@ func (server *Server) RegisterStopHandler(handler ServerStopper) {
 	server.protocol.registerStopper(handler)
 }
 
-func (server *Server) listen() {
-	defer server.Wg.Done()
-	for {
-		if server.Stopped {
-			return
-		}
+func (server *Server) listen(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for !server.Stopped {
 		conn, err := server.listener.Accept()
 		if err != nil {
 			if server.Stopped {

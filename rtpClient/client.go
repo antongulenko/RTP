@@ -81,6 +81,6 @@ func (client *RtpClient) Stop() {
 	})
 }
 
-func (client *RtpClient) Observe(wg *sync.WaitGroup) <-chan interface{} {
-	return client.stopped.Observe(wg)
+func (client *RtpClient) Start(wg *sync.WaitGroup) <-chan interface{} {
+	return client.stopped.Start(wg)
 }

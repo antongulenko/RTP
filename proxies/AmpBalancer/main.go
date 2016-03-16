@@ -70,7 +70,7 @@ func main() {
 	heartbeat_timeout := time.Duration(*_heartbeat_timeout) * time.Millisecond
 
 	var detector_factory balancer.FaultDetectorFactory
-	observees := golib.NewObserveeGroup()
+	tasks := golib.NewTaskGroup()
 	var heartbeatServer *heartbeat.HeartbeatServer
 	if *useHeartbeat {
 		var err error
@@ -81,7 +81,7 @@ func main() {
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
 			return heartbeatServer.ObserveServer(endpoint, heartbeat_frequency, heartbeat_timeout)
 		}
-		observees.AddNamed("heartbeat", heartbeatServer)
+		tasks.AddNamed("heartbeat", heartbeatServer)
 	} else {
 		detector_factory = func(endpoint string) (protocols.FaultDetector, error) {
 			detector, err := ping.DialNewFaultDetector(endpoint)
@@ -99,7 +99,7 @@ func main() {
 	golib.Checkerr(err)
 	server, err := amp_balancer.RegisterPluginServer(baseServer)
 	golib.Checkerr(err)
-	observees.AddNamed("server", server)
+	tasks.AddNamed("server", server)
 
 	ampPlugin := amp_balancer.NewAmpBalancingPlugin(detector_factory)
 	server.AddPlugin(ampPlugin)
@@ -129,11 +129,9 @@ func main() {
 	log.Println("Listening to AMP on " + amp_addr)
 	log.Println("Press Ctrl-C to close")
 
-	server.Start()
 	if heartbeatServer != nil {
-		heartbeatServer.Start()
+		tasks.Add(heartbeatServer)
 	}
-
-	observees.Add(&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"})
-	observees.WaitAndStop(nil)
+	tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
+	tasks.WaitAndStop()
 }

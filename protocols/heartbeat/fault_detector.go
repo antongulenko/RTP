@@ -3,6 +3,7 @@ package heartbeat
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/antongulenko/RTP/protocols"
@@ -41,11 +42,12 @@ func NewHeartbeatServer(local_addr string) (*HeartbeatServer, error) {
 	}
 }
 
-func (server *HeartbeatServer) Start() {
-	server.Server.Start()
+func (server *HeartbeatServer) Start(wg *sync.WaitGroup) <-chan interface{} {
+	res := server.Server.Start(wg)
 	for _, detector := range server.detectors {
 		detector.Start()
 	}
+	return res
 }
 
 func (server *serverStopper) StopServer() {

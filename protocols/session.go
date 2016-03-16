@@ -18,7 +18,7 @@ type SessionBase struct {
 
 type Session interface {
 	Start(base *SessionBase)
-	Observees() []golib.Observee
+	Tasks() []golib.Task
 	Cleanup()
 }
 
@@ -29,7 +29,7 @@ func (sessions Sessions) StartSession(key interface{}, session Session) {
 		Session: session,
 	}
 	sessions[key] = base
-	base.observe()
+	base.start()
 	session.Start(base)
 }
 
@@ -104,20 +104,20 @@ func (base *SessionBase) StopAndFormatError() error {
 	}
 }
 
-func (base *SessionBase) observe() {
-	if len(base.Session.Observees()) < 1 {
+func (base *SessionBase) start() {
+	if len(base.Session.Tasks()) < 1 {
 		return
 	}
 	go func() {
-		golib.WaitForAnyObservee(base.Wg, base.Session.Observees())
+		golib.WaitForAnyTask(base.Wg, base.Session.Tasks())
 		base.Stop()
 	}()
 }
 
 func (base *SessionBase) Stop() {
 	base.Stopped.Enable(func() {
-		for _, observee := range base.Session.Observees() {
-			observee.Stop()
+		for _, task := range base.Session.Tasks() {
+			task.Stop()
 		}
 		base.Wg.Wait()
 		base.Session.Cleanup()

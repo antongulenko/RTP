@@ -7,12 +7,12 @@ import (
 	"net"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/antongulenko/RTP/protocols"
 	"github.com/antongulenko/RTP/protocols/amp"
 	"github.com/antongulenko/RTP/protocols/load"
-	"github.com/antongulenko/RTP/proxies"
 	"github.com/antongulenko/RTP/rtpClient"
 	"github.com/antongulenko/RTP/stats"
 	"github.com/antongulenko/golib"
@@ -21,7 +21,7 @@ import (
 
 var (
 	statistics []*stats.Stats
-	observees  = golib.NewObserveeGroup()
+	tasks      = golib.NewTaskGroup()
 )
 
 var (
@@ -69,7 +69,7 @@ func startRtpClient() (rtp_port int) {
 			break
 		}
 	}
-	observees.AddNamed("client", client)
+	tasks.AddNamed("client", client)
 	log.Printf("Listening on %v UDP ports %v and %v for rtp/rtcp\n", rtp_ip, rtp_port, rtp_port+1)
 
 	if print_ctrl_events {
@@ -108,13 +108,12 @@ func startLoadClient() (port int) {
 		}
 		break
 	}
-	observees.AddNamed("client", server)
+	tasks.AddNamed("client", server)
 	go func() {
 		for err := range server.Errors() {
 			log.Println("Error receiving Load:", err)
 		}
 	}()
-	server.Start()
 	log.Printf("Listening on %v UDP port %v for Load\n", rtp_ip, port)
 
 	statistics = append(statistics, stats.Received)
@@ -129,10 +128,10 @@ func startStream(target_ip string, rtp_port int) {
 		golib.Checkerr(err)
 		client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 		golib.Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
-		observees.AddNamed("stream", golib.CleanupObservee(func() {
+		tasks.AddNamed("stream", &golib.CleanupTask{Cleanup: func() {
 			golib.Printerr(client.StopStream(target_ip, rtp_port))
 			golib.Printerr(client.Close())
-		}))
+		}})
 	}
 	if use_rtsp {
 		if target_ip != rtp_ip {
@@ -141,12 +140,12 @@ func startStream(target_ip string, rtp_port int) {
 		log.Println("Starting stream using RTSP at", rtsp_url)
 		rtspCommand, err := rtpClient.StartRtspClient(rtsp_url, rtp_port, "main.log")
 		golib.Checkerr(err)
-		observees.AddNamed("rtsp", rtspCommand)
+		tasks.AddNamed("rtsp", rtspCommand)
 	}
 }
 
-func stopObservees() {
-	observees.ReverseStop()
+func stopTasks() {
+	tasks.ReverseStop()
 }
 
 func parseFlags() {
@@ -214,11 +213,14 @@ func printStatistics() {
 	if running_average {
 		agg.Start()
 	}
-	observees.AddNamed("stats",
-		golib.LoopObservee(func() {
+	tasks.AddNamed("stats",
+		golib.LoopTask(func(stop <-chan interface{}) {
 			agg.Flush(3)
 			fmt.Printf("==============\n%s", agg.String())
-			time.Sleep(time.Second)
+			select {
+			case <-time.After(time.Second):
+			case <-stop:
+			}
 		}))
 }
 
@@ -237,19 +239,21 @@ func startScenarios() {
 
 func main() {
 	parseFlags()
-	proxies.ExitHook = stopObservees
+	golib.ErrorExitHook = stopTasks
 	startScenarios()
 
 	if close_stdin {
 		log.Println("Press Ctrl-D to interrupt")
-		observees.Add(&golib.NoopObservee{golib.StdinClosed(), "stdin closed"})
+		tasks.Add(&golib.NoopTask{golib.StdinClosed(), "stdin closed"})
 	}
 	if close_int {
 		log.Println("Press Ctrl-C to interrupt")
-		observees.Add(&golib.NoopObservee{golib.ExternalInterrupt(), "external interrupt"})
+		tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
 	}
 
-	choice := observees.WaitForAny(nil)
+	var wg sync.WaitGroup
+	choice := tasks.WaitForAny(&wg)
 	log.Printf("Stopped because of %T: %v\n", choice, choice)
-	stopObservees()
+	stopTasks()
+	wg.Wait()
 }

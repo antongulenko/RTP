@@ -107,8 +107,8 @@ func (proxy *PcpProxy) StopProxyPair(val *pcp.StopProxyPair) error {
 	return proxy.sessions.DeleteSession(val.ProxyPort1)
 }
 
-func (session *udpSession) Observees() []golib.Observee {
-	result := []golib.Observee{session.udp}
+func (session *udpSession) Tasks() []golib.Task {
+	result := []golib.Task{session.udp}
 	if session.udp2 != nil {
 		result = append(result, session.udp2)
 	}
@@ -117,10 +117,6 @@ func (session *udpSession) Observees() []golib.Observee {
 
 func (session *udpSession) Start(base *protocols.SessionBase) {
 	session.SessionBase = base
-	session.udp.Start()
-	if session.udp2 != nil {
-		session.udp2.Start()
-	}
 	if session.proxy.ProxyStartedCallback != nil {
 		session.proxy.ProxyStartedCallback(session.udp)
 		if session.udp2 != nil {
@@ -132,10 +128,10 @@ func (session *udpSession) Start(base *protocols.SessionBase) {
 func (session *udpSession) Cleanup() {
 	var errors golib.MultiError
 	if session.udp.Err != nil {
-		errors = append(errors, fmt.Errorf("UDP proxy %v error: %v", session.udp, session.udp.Err))
+		errors.Add(fmt.Errorf("UDP proxy %v error: %v", session.udp, session.udp.Err))
 	}
 	if session.udp2 != nil && session.udp2.Err != nil {
-		errors = append(errors, fmt.Errorf("UDP proxy %v error: %v", session.udp2, session.udp2.Err))
+		errors.Add(fmt.Errorf("UDP proxy %v error: %v", session.udp2, session.udp2.Err))
 	}
 	session.CleanupErr = errors.NilOrError()
 	if session.proxy.ProxyStoppedCallback != nil {

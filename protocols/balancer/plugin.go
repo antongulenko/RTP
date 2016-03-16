@@ -161,8 +161,8 @@ func (session *BalancingSession) Start(sendingSession protocols.PluginSessionHan
 	// Nothing else to do. BalancingSession.NewSession() fully starts the session.
 }
 
-func (session *BalancingSession) Observees() []golib.Observee {
-	return nil // No observees
+func (session *BalancingSession) Tasks() []golib.Task {
+	return nil // No tasks
 }
 
 func (session *BalancingSession) Cleanup() error {
