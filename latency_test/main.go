@@ -27,7 +27,7 @@ func main() {
 	err = client.SetServer(*target_addr)
 	golib.Checkerr(err)
 
-	measureLatency := golib.LoopTask(func(stop <-chan interface{}) {
+	measureLatency := golib.LoopTask(func(stop golib.StopChan) {
 		err := client.SendMeasureLatency()
 		if err != nil {
 			log.Println("Error sending Latency packet:", err)
@@ -43,5 +43,5 @@ func main() {
 	golib.NewTaskGroup(
 		server, measureLatency,
 		&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"},
-	).WaitAndStop()
+	).PrintWaitAndStop()
 }

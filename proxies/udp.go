@@ -121,7 +121,7 @@ func NewUdpProxyPair(listenHost, target1, target2 string) (proxy1 *UdpProxy, pro
 	return
 }
 
-func (proxy *UdpProxy) Start(wg *sync.WaitGroup) <-chan interface{} {
+func (proxy *UdpProxy) Start(wg *sync.WaitGroup) golib.StopChan {
 	wg.Add(2)
 	go proxy.readPackets(wg)
 	go proxy.forwardPackets(wg)

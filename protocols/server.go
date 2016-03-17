@@ -65,7 +65,7 @@ func (server *Server) Errors() <-chan error {
 	return server.errors
 }
 
-func (server *Server) Start(wg *sync.WaitGroup) <-chan interface{} {
+func (server *Server) Start(wg *sync.WaitGroup) golib.StopChan {
 	wg.Add(1)
 	go server.listen(wg)
 	return server.stopped.Start(wg)

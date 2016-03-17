@@ -96,7 +96,7 @@ func (server *serverState) configureHeartbeat(receiver string, token int64, time
 	return nil
 }
 
-func (server *serverState) Start(wg *sync.WaitGroup) <-chan interface{} {
+func (server *serverState) Start(wg *sync.WaitGroup) golib.StopChan {
 	res := server.Server.Start(wg)
 	server.wg = wg
 	return res

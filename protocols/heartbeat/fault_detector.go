@@ -42,7 +42,7 @@ func NewHeartbeatServer(local_addr string) (*HeartbeatServer, error) {
 	}
 }
 
-func (server *HeartbeatServer) Start(wg *sync.WaitGroup) <-chan interface{} {
+func (server *HeartbeatServer) Start(wg *sync.WaitGroup) golib.StopChan {
 	res := server.Server.Start(wg)
 	for _, detector := range server.detectors {
 		detector.Start()

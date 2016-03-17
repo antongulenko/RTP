@@ -133,5 +133,5 @@ func main() {
 		tasks.Add(heartbeatServer)
 	}
 	tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
-	tasks.WaitAndStop()
+	tasks.PrintWaitAndStop()
 }

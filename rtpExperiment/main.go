@@ -7,7 +7,6 @@ import (
 	"net"
 	"runtime"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/antongulenko/RTP/protocols"
@@ -214,7 +213,7 @@ func printStatistics() {
 		agg.Start()
 	}
 	tasks.AddNamed("stats",
-		golib.LoopTask(func(stop <-chan interface{}) {
+		golib.LoopTask(func(stop golib.StopChan) {
 			agg.Flush(3)
 			fmt.Printf("==============\n%s", agg.String())
 			select {
@@ -251,9 +250,5 @@ func main() {
 		tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
 	}
 
-	var wg sync.WaitGroup
-	choice := tasks.WaitForAny(&wg)
-	log.Printf("Stopped because of %T: %v\n", choice, choice)
-	stopTasks()
-	wg.Wait()
+	tasks.PrintWaitAndStop()
 }

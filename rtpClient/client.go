@@ -81,6 +81,6 @@ func (client *RtpClient) Stop() {
 	})
 }
 
-func (client *RtpClient) Start(wg *sync.WaitGroup) <-chan interface{} {
+func (client *RtpClient) Start(wg *sync.WaitGroup) golib.StopChan {
 	return client.stopped.Start(wg)
 }

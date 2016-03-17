@@ -53,5 +53,5 @@ func main() {
 	golib.NewTaskGroup(
 		server,
 		&golib.NoopTask{golib.StdinClosed(), "stdin closed"},
-	).WaitAndStop()
+	).PrintWaitAndStop()
 }
