@@ -127,10 +127,11 @@ func startStream(target_ip string, rtp_port int) {
 		golib.Checkerr(err)
 		client.SetTimeout(time.Duration(client_timeout * float64(time.Second)))
 		golib.Checkerr(client.StartStream(target_ip, rtp_port, amp_media_file))
-		tasks.AddNamed("stream", &golib.CleanupTask{Cleanup: func() {
-			golib.Printerr(client.StopStream(target_ip, rtp_port))
-			golib.Printerr(client.Close())
-		}})
+		tasks.AddNamed("stream", &golib.CleanupTask{Description: "stop rtp stream",
+			Cleanup: func() {
+				golib.Printerr(client.StopStream(target_ip, rtp_port))
+				golib.Printerr(client.Close())
+			}})
 	}
 	if use_rtsp {
 		if target_ip != rtp_ip {
@@ -250,5 +251,5 @@ func main() {
 		tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
 	}
 
-	tasks.PrintWaitAndStop()
+	tasks.TimeoutPrintWaitAndStop(2*time.Second, false)
 }
