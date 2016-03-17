@@ -109,6 +109,7 @@ func (base *SessionBase) start() {
 		return
 	}
 	go func() {
+		// TODO handle results
 		golib.WaitForAnyTask(base.Wg, base.Session.Tasks())
 		base.Stop()
 	}()

@@ -199,7 +199,7 @@ func startScenario() {
 	start_rtp_port = client_port + 2
 	stream_ip := rtp_ip
 	if use_proxy {
-		stream_ip, client_port = startProxies(client_port)
+		stream_ip, client_port = startProxies(proxy_port, client_port)
 		proxy_port += 2
 	}
 	startStream(stream_ip, client_port)

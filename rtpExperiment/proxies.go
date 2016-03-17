@@ -41,7 +41,7 @@ func closeProxyPCP(client *pcp.Client, listenPort, targetPort int) {
 	golib.Printerr(client.StopProxy(pcpProxyAddrs(listenPort, targetPort)))
 }
 
-func startProxies(rtp_port int) (string, int) {
+func startProxies(proxy_port, rtp_port int) (string, int) {
 	proxy_ip := rtp_ip
 	if !pretend_proxy {
 		if use_pcp {
