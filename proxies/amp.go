@@ -203,7 +203,7 @@ func (session *streamSession) Tasks() []golib.Task {
 		session.rtpProxy,
 		session.rtcpProxy,
 		session.backend,
-		golib.LoopTask(func(stop golib.StopChan) {
+		golib.NewLoopTask("printing proxy errors", func(stop golib.StopChan) {
 			select {
 			case err := <-errors1:
 				session.proxy.LogError(fmt.Errorf("RTP %v write error: %v", session.rtpProxy, err))

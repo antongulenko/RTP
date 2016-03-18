@@ -144,10 +144,6 @@ func startStream(target_ip string, rtp_port int) {
 	}
 }
 
-func stopTasks() {
-	tasks.ReverseStop()
-}
-
 func parseFlags() {
 	flag.IntVar(&num_clients, "num", num_clients,
 		"Number of parallel RTP streams to initiate.\n"+
@@ -214,7 +210,7 @@ func printStatistics() {
 		agg.Start()
 	}
 	tasks.AddNamed("stats",
-		golib.LoopTask(func(stop golib.StopChan) {
+		golib.NewLoopTask("printing statistics", func(stop golib.StopChan) {
 			agg.Flush(3)
 			fmt.Printf("==============\n%s", agg.String())
 			select {
@@ -239,7 +235,7 @@ func startScenarios() {
 
 func main() {
 	parseFlags()
-	golib.ErrorExitHook = stopTasks
+	golib.ErrorExitHook = tasks.WaitAndExit
 	startScenarios()
 
 	if close_stdin {
@@ -251,5 +247,5 @@ func main() {
 		tasks.Add(&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"})
 	}
 
-	tasks.TimeoutPrintWaitAndStop(2*time.Second, false)
+	tasks.WaitAndExit()
 }

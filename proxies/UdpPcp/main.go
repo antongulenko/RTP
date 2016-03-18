@@ -47,5 +47,5 @@ func main() {
 	golib.NewTaskGroup(
 		server,
 		&golib.NoopTask{golib.ExternalInterrupt(), "external interrupt"},
-	).PrintWaitAndStop()
+	).WaitAndExit()
 }
