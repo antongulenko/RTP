@@ -1,6 +1,7 @@
 package rtpClient
 
 import (
+	"fmt"
 	"net"
 	"sync"
 
@@ -64,6 +65,10 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 	go client.handleDataPackets()
 
 	return client, nil
+}
+
+func (client *RtpClient) String() string {
+	return fmt.Sprintf("RtpClient(port %v)", client.listenPort)
 }
 
 func (client *RtpClient) Stop() {
