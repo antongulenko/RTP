@@ -5,6 +5,7 @@ package load
 import (
 	"encoding/gob"
 	"fmt"
+	"time"
 
 	"github.com/antongulenko/RTP/protocols"
 )
@@ -16,12 +17,23 @@ var (
 
 const (
 	codeLoad   = protocols.Code(100)
-	PacketSize = 57 // Reported by tcpdump, size of LoadPacket with empty Payload. Varies between 55-57.
+	PacketSize = 105 // Reported by tcpdump, size of LoadPacket with empty Payload. Varies between 105-107.
 )
 
 type LoadPacket struct {
-	Seq     uint
-	Payload []byte
+	Seq       uint
+	Payload   []byte
+	Timestamp time.Time
+}
+
+func (packet *LoadPacket) String() string {
+	return fmt.Sprintf("Load(Seq %v, %v byte payload)", packet.Seq, len(packet.Payload))
+}
+
+func (packet *LoadPacket) PrintReceived() {
+	now := time.Now()
+	latency := now.Sub(packet.Timestamp)
+	fmt.Printf("%v: Seq %3d (latency %v)\n", now.Format("15:04:05.000000000"), packet.Seq, latency)
 }
 
 type loadProtocol struct {

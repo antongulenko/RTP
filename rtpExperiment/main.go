@@ -47,7 +47,8 @@ var (
 	use_rtsp = false
 	rtsp_url = "rtsp://127.0.1.1:8554/Sample.264"
 
-	use_load = false
+	use_load           = false
+	print_load_packets = false
 
 	client_timeout = 2.0
 
@@ -104,6 +105,11 @@ func startLoadClient() (port int) {
 			log.Printf("Failed to register Load server on port %v: %v", port, err)
 			port += 2
 			continue
+		}
+		if print_load_packets {
+			stats.Handler = func(packet *load.LoadPacket) {
+				packet.PrintReceived()
+			}
 		}
 		break
 	}
@@ -174,6 +180,7 @@ func parseFlags() {
 	flag.IntVar(&start_rtp_port, "rtp_port", start_rtp_port, "The local port to receive RTP traffic")
 
 	flag.BoolVar(&use_load, "load", use_load, "Listen for Load traffic instead of RTP/RTCP traffic")
+	flag.BoolVar(&print_load_packets, "print_load_packets", print_load_packets, "Print incoming Load packets with timestamp")
 	flag.Float64Var(&client_timeout, "timeout", client_timeout, "Timeout for client requests, if any are used")
 
 	flag.Parse()

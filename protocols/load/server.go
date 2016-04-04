@@ -13,6 +13,8 @@ type LoadStats struct {
 
 	Received *stats.Stats
 	Missed   *stats.Stats
+
+	Handler func(packet *LoadPacket)
 }
 
 func RegisterServer(server *protocols.Server) (*LoadStats, error) {
@@ -35,6 +37,9 @@ func RegisterServer(server *protocols.Server) (*LoadStats, error) {
 
 func (stats *LoadStats) handleLoad(packet *protocols.Packet) *protocols.Packet {
 	if load, ok := packet.Val.(*LoadPacket); ok {
+		if handler := stats.Handler; handler != nil {
+			handler(load)
+		}
 		stats.addPacket(load)
 	} else {
 		stats.server.LogError(fmt.Errorf("Received illegal value for LoadPacket: %v", packet.Val))

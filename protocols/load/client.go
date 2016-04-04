@@ -1,7 +1,6 @@
 package load
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -38,13 +37,13 @@ func (client *Client) SetPayload(size uint) {
 	for i = 0; i < size; i++ {
 		client.extraPayload[i] = byte(rand.Int())
 	}
-	fmt.Println("LEN", len(client.extraPayload), "SIZE", size)
 }
 
 func (client *Client) SendLoad() error {
 	err := client.Send(codeLoad, &LoadPacket{
-		Seq:     client.seq,
-		Payload: client.extraPayload,
+		Seq:       client.seq,
+		Payload:   client.extraPayload,
+		Timestamp: time.Now(),
 	})
 	client.seq++
 	return err

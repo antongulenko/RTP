@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net"
 	"time"
 
 	"github.com/antongulenko/RTP/protocols"
@@ -17,14 +16,10 @@ const (
 func main() {
 	target_addr := flag.String("target", default_target, "The partner to exchange latency measurement packets with")
 	local_addr := protocols.ParseServerFlags("0.0.0.0", 6060)
-	local_host, _, err := net.SplitHostPort(local_addr)
-	golib.Checkerr(err)
 
 	server, err := NewServer(local_addr)
 	golib.Checkerr(err)
-	client, err := NewClientFor(local_host)
-	golib.Checkerr(err)
-	err = client.SetServer(*target_addr)
+	client, err := NewClientFor(*target_addr)
 	golib.Checkerr(err)
 
 	measureLatency := golib.NewLoopTask("sending latency packets", func(stop golib.StopChan) {

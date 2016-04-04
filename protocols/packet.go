@@ -19,6 +19,10 @@ type Packet struct {
 	SourceAddr Addr
 }
 
+func (packet *Packet) String() string {
+	return fmt.Sprintf("%v from %v", packet.Val, packet.SourceAddr)
+}
+
 type MarshallingProvider interface {
 	MarshalPacket(packet *Packet) ([]byte, error)
 	UnmarshalPacket([]byte, Protocol) (*Packet, error)
