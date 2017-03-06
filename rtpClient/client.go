@@ -17,7 +17,7 @@ const (
 
 type RtpClient struct {
 	wg      sync.WaitGroup
-	stopped *golib.OneshotCondition
+	stopped golib.StopChan
 
 	listenPort     int
 	sequenceNumber uint16
@@ -56,7 +56,7 @@ func NewRtpClient(listenIP string, listenPort int) (*RtpClient, error) {
 		RtpSession:   session,
 		ctrlChan:     session.CreateCtrlEventChan(rtpCtrlBuffer),
 		dataChan:     session.CreateDataReceiveChan(rtpDataBuffer),
-		stopped:      golib.NewOneshotCondition(),
+		stopped:      golib.NewStopChan(),
 	}
 
 	client.wg.Add(1)

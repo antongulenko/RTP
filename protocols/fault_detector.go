@@ -43,7 +43,7 @@ type FaultDetectorBase struct {
 	callbacks      []faultDetectorCallbackData
 	lastErr        error
 	observedServer observedServer
-	Closed         *golib.OneshotCondition
+	Closed         golib.StopChan
 }
 
 func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetectorBase {
@@ -53,7 +53,7 @@ func NewFaultDetectorBase(observedProtocol Protocol, server Addr) *FaultDetector
 			observedProtocol,
 			server,
 		},
-		Closed: golib.NewOneshotCondition(),
+		Closed: golib.NewStopChan(),
 	}
 }
 

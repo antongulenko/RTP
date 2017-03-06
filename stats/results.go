@@ -28,7 +28,7 @@ type Results struct {
 
 	runningAverage  bool
 	startOnce       sync.Once
-	stopped         *golib.OneshotCondition
+	stopped         golib.StopChan
 	incomingPackets chan packet
 
 	totalPackets uint
@@ -40,7 +40,7 @@ func NewResults() *Results {
 	return &Results{
 		packets:        list.New(),
 		startTimestamp: time.Now(),
-		stopped:        golib.NewOneshotCondition(),
+		stopped:        golib.NewStopChan(),
 	}
 }
 

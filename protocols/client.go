@@ -36,7 +36,7 @@ type client struct {
 	conn       Conn
 
 	protocol Protocol
-	closed   *golib.OneshotCondition
+	closed   golib.StopChan
 
 	// TODO use lock
 	connLock sync.Mutex
@@ -48,7 +48,7 @@ type client struct {
 func NewClient(protocol Protocol) Client {
 	return &client{
 		protocol: protocol,
-		closed:   golib.NewOneshotCondition(),
+		closed:   golib.NewStopChan(),
 		timeout:  DefaultTimeout,
 	}
 }

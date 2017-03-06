@@ -18,7 +18,7 @@ const (
 )
 
 type Server struct {
-	stopped  *golib.OneshotCondition
+	stopped  golib.StopChan
 	listener Listener
 	errors   chan error
 
@@ -30,7 +30,7 @@ type Server struct {
 func NewServer(addr_string string, protocol Protocol) (*Server, error) {
 	server := &Server{
 		errors:  make(chan error, ErrorChanBuffer),
-		stopped: golib.NewOneshotCondition(),
+		stopped: golib.NewStopChan(),
 	}
 	var err error
 	server.protocol, err = protocol.instantiateServer(server)

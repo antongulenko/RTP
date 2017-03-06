@@ -39,7 +39,7 @@ type serverState struct {
 	wg               *sync.WaitGroup
 	token            int64
 	heartbeatClient  protocols.Client
-	heartbeatRunning *golib.OneshotCondition
+	heartbeatRunning golib.StopChan
 	heartbeatTimeout time.Duration
 	heartbeatSeq     uint64
 }
@@ -47,7 +47,7 @@ type serverState struct {
 func (proto *heartbeatProtocol) ServerHandlers(server *protocols.Server) protocols.ServerHandlerMap {
 	state := &serverState{
 		Server:           server,
-		heartbeatRunning: golib.NewOneshotCondition(),
+		heartbeatRunning: golib.NewStopChan(),
 	}
 	return protocols.ServerHandlerMap{
 		codeConfigureHeartbeat: state.handleConfigureHeartbeat,

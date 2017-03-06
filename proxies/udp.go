@@ -45,7 +45,7 @@ type UdpProxy struct {
 	targetConn *net.UDPConn
 	targetAddr *net.UDPAddr
 
-	proxyClosed    *golib.OneshotCondition
+	proxyClosed    golib.StopChan
 	packets        chan []byte
 	targetConnLock sync.Mutex
 
@@ -89,7 +89,7 @@ func NewUdpProxy(listenAddr, targetAddr string) (*UdpProxy, error) {
 		targetConn:      targetConn,
 		targetAddr:      targetUDP,
 		packets:         make(chan []byte, BufferedPackets),
-		proxyClosed:     golib.NewOneshotCondition(),
+		proxyClosed:     golib.NewStopChan(),
 		writeErrors:     make(chan error, buf_write_errors),
 		Stats:           stats.NewStats("UDP Proxy " + listenAddr),
 		OnError:         OnErrorClose,

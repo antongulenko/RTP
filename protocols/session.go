@@ -11,7 +11,7 @@ type Sessions map[interface{}]*SessionBase
 
 type SessionBase struct {
 	Wg         *sync.WaitGroup
-	Stopped    *golib.OneshotCondition
+	Stopped    golib.StopChan
 	CleanupErr error
 	Session    Session
 }
@@ -25,7 +25,7 @@ type Session interface {
 func (sessions Sessions) StartSession(key interface{}, session Session) {
 	base := &SessionBase{
 		Wg:      new(sync.WaitGroup),
-		Stopped: golib.NewOneshotCondition(),
+		Stopped: golib.NewStopChan(),
 		Session: session,
 	}
 	sessions[key] = base
